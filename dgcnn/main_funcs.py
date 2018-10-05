@@ -50,6 +50,7 @@ def train(flags):
     current_idx = 0
     loss_v = []
     accuracy_v  = []
+    trainer.zero_gradients(sess)
     while current_idx < flags.BATCH_SIZE:
       for _ in flags.GPUS:
         start = current_idx
@@ -57,11 +58,11 @@ def train(flags):
         data_v.append(data[start:end])
         label_v.append(label[start:end])
         current_idx = end
-      _,loss,accuracy = trainer.accum_gradient(sess,data_v,label_v)
+      _,accuracy,loss = trainer.accum_gradient(sess,data_v,label_v)
       loss_v.append(loss)
       accuracy_v.append(accuracy)
-    loss = np.array(loss_v).mean()
-    accuracy = np.array(accuracy_v).mean()
+    loss = np.mean(loss_v)
+    accuracy = np.mean(accuracy_v)
     if (iteration+1) % flags.REPORT_STEP == 0:
       epoch = iteration * float(flags.BATCH_SIZE) / io.num_entries()
       print('Iteration %d (epoch %g) ... loss %g accuracy %g' % (iteration,epoch,loss,accuracy))

@@ -8,7 +8,7 @@ class DGCNN_FLAGS:
     NUM_EDGE_CONV = 3
     TRAIN         = True
     KVALUE        = 20
-    DEBUG         = False
+    DEBUG         = True
     
     # gcnn_trainval flags
     SEED          = -1

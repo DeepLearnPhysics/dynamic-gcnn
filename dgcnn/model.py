@@ -13,9 +13,9 @@ def build(point_cloud, flags):
   net = point_cloud
   batch_size = net.get_shape()[0].value
   num_point  = net.get_shape()[1].value
-  print('input',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
 
-  tensors = ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=64, trainable=is_training, debug=True)
+  tensors = ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=64, trainable=is_training, debug=debug)
   
   concat = []
   for i in range(num_edge_conv):
@@ -31,23 +31,23 @@ def build(point_cloud, flags):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'MergedEdgeConv')
-  if debug: print('Net',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   tensors.append(net)
 
   net = slim.max_pool2d(net, kernel_size=[num_point,1], scope='maxpool0')
-  if debug: print('MaxPool',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   net  = tf.tile(net, [1, num_point, 1, 1])
-  if debug: print('Tile',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   concat = [net] + tensors
 
   net = tf.concat(values=concat, axis=3)
-  if debug: print('Net',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
 
-  net = ops.fc(net=net, repeat=2, num_filters=[512,256], trainable=is_training, debug=True)
+  net = ops.fc(net=net, repeat=2, num_filters=[512,256], trainable=is_training, debug=debug)
 
   if is_training:
     net = tf.nn.dropout(net, 0.7, None)
-    if debug: print('Dropout',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
 
   net = slim.conv2d(inputs      = net,
                     num_outputs = 2,
@@ -58,9 +58,9 @@ def build(point_cloud, flags):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'Final')
-  if debug: print('Final',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   
   net = tf.squeeze(net, [2])
-  if debug: print('Squeeze',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   return net
 

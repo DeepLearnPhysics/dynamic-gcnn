@@ -40,7 +40,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
 
   net = point_cloud
   net = edges(net, k=k)
-  if debug: print('Edge',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   net = slim.conv2d(inputs      = net,
                     num_outputs = num_filters,
                     kernel_size = 1,
@@ -50,13 +50,13 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'conv0')
-  if debug: print('conv0',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   net_max  = tf.reduce_max  (net, axis=-2, keep_dims=True)
   net_mean = tf.reduce_mean (net, axis=-2, keep_dims=True)
   net = tf.concat([net_max, net_mean], axis=-1)
-  if debug: print('Max',net_max.shape)
-  if debug: print('Mean',net_mean.shape)
-  if debug: print('Concat',net.shape)
+  if debug: print(net_max.shape.as_list(),net_max.name)
+  if debug: print(net_mean.shape.as_list(),net_mean.name)
+  if debug: print(net.shape.as_list(),net.name)
   net = slim.conv2d(inputs      = net,
                     num_outputs = 64,
                     kernel_size = 1,
@@ -66,7 +66,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'conv1')
-  if debug: print('conv1',net.shape)
+  if debug: print(net.shape.as_list(),net.name)
   
   return [net_max, net_mean, net]
 
@@ -115,6 +115,6 @@ def fc(net, repeat, num_filters, trainable, debug=False):
                       normalizer_fn = slim.batch_norm,
                       #activation_fn = None,
                       scope       = scope)
-  if debug: print(scope,net.shape)
+    if debug: print(net.shape.as_list(),net.name)
 
   return net

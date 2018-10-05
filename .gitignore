@@ -4,3 +4,5 @@ arxiv
 *.dat
 *.root
 *.pyc
+log
+*.txt
