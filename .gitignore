@@ -6,3 +6,4 @@ arxiv
 *.pyc
 log
 *.txt
+weights

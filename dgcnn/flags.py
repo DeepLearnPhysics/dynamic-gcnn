@@ -4,25 +4,30 @@ import argparse, os, sys
 from main_funcs import train
 class DGCNN_FLAGS:
 
-    # gcnn_model flags
+    # flags for model
+    NUM_CLASS     = 2
     NUM_EDGE_CONV = 3
     TRAIN         = True
     KVALUE        = 20
     DEBUG         = True
     
-    # gcnn_trainval flags
-    SEED          = -1
-    LEARNING_RATE = 0.001
-    GPUS = [0]
+    # flags for train/inference
+    SEED           = -1
+    LEARNING_RATE  = 0.001
+    GPUS           = [0]
     MINIBATCH_SIZE = 1
-    KVALUE = 20
-    NUM_POINT = 2048
-    NUM_CHANNEL = 4
-    TRAINING = True
-    ITERATION = 10000
-    REPORT_STEP = 100
+    WEIGHT_PREFIX  = './weights/snapshot'
+    KVALUE         = 20
+    NUM_POINT      = 2048
+    NUM_CHANNEL    = 4
+    ITERATION      = 10000
+    REPORT_STEP    = 100
+    SUMMARY_STEP     = 20
+    CHECKPOINT_STEP  = 500
+    CHECKPOINT_NUM   = 10
+    CHECKPOINT_HOUR = 0.4
 
-    # gcnn_io flags
+    # flags for IO
     IO_TYPE    = 'h5'
     INPUT_FILE = '/scratch/kterao/dlprod_ppn_v08/dgcnn_p02_test_4ch.hdf5'
     BATCH_SIZE = 1
@@ -33,9 +38,11 @@ class DGCNN_FLAGS:
         self._build_parsers()
 
     def _attach_common_args(self,parser):
-        parser.add_argument('-kv','--kvalue',type=int,default=self.KVALUE,help='K value')
+        parser.add_argument('-kv','--kvalue',type=int,default=self.KVALUE,help='K value [default: %s]' % self.KVALUE)
         parser.add_argument('--gpus', type=str, default='0',
                             help='GPUs to utilize (comma-separated integers')
+        parser.add_argument('-nc','--num_class', type=int, default=self.NUM_CLASS,
+                            help='Number of classes [default: %s]' % self.NUM_CLASS)
         parser.add_argument('-np','--num_point', type=int, default=self.NUM_POINT,
                             help='Point number [default: %s]' % self.NUM_POINT)
         parser.add_argument('-it','--iterations', type=int, default=self.ITERATION,
@@ -61,12 +68,22 @@ class DGCNN_FLAGS:
                                   help='Seed for random number generators [default: %s]' % self.SEED)
         train_parser.add_argument('-ld','--log_dir', default=self.LOG_DIR,
                                   help='Log dir [default: %s]' % self.LOG_DIR)
+        train_parser.add_argument('-wp','--weight_prefix', default=self.WEIGHT_PREFIX,
+                                  help='Prefix (directory + file prefix) for snapshots of weights [default: %s]' % self.WEIGHT_PREFIX)
         train_parser.add_argument('-mbs','--minibatch_size', type=int, default=self.MINIBATCH_SIZE,
                                   help='Mini-Batch Size during training for each GPU [default: %s]' % self.MINIBATCH_SIZE)
         train_parser.add_argument('-lr','--learning_rate', type=float, default=self.LEARNING_RATE,
                                   help='Initial learning rate [default: %s]' % self.LEARNING_RATE)
         train_parser.add_argument('-rs','--report_step', type=int, default=self.REPORT_STEP,
                                   help='Period (in steps) to print out loss and accuracy [default: %s]' % self.REPORT_STEP)
+        train_parser.add_argument('-ss','--summary_step', type=int, default=self.SUMMARY_STEP,
+                                  help='Period (in steps) to store summary in tensorboard log [default: %s]' % self.SUMMARY_STEP)
+        train_parser.add_argument('-chks','--checkpoint_step', type=int, default=self.CHECKPOINT_STEP,
+                                  help='Period (in steps) to store snapshot of weights [default: %s]' % self.CHECKPOINT_STEP)
+        train_parser.add_argument('-chkn','--checkpoint_num', type=int, default=self.CHECKPOINT_NUM,
+                                  help='Number of the latest checkpoint to keep [default: %s]' % self.CHECKPOINT_NUM)
+        train_parser.add_argument('-chkh','--checkpoint_hour', type=float, default=self.CHECKPOINT_HOUR,
+                                  help='Period (in hours) to store checkpoint [default: %s]' % self.CHECKPOINT_HOUR)
         # attach common parsers
         self.train_parser = self._attach_common_args(train_parser)
 

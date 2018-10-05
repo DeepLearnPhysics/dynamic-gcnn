@@ -1,4 +1,7 @@
-import model
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+import dgcnn
 import tensorflow as tf
   
 class trainval(object):
@@ -29,8 +32,7 @@ class trainval(object):
                                       shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT))
               self._points_v.append(points)
               self._labels_v.append(labels)
-            
-              pred = model.build(points, self._flags)
+              pred = dgcnn.model.build(points, self._flags)
               loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=labels)
               loss = tf.reduce_mean(loss)
               loss_v.append(loss)
@@ -65,8 +67,12 @@ class trainval(object):
 
         self._accum_grad_v += [accum_vars[j].assign_add(g[0]) for j,g in enumerate(average_grad_v)]
         self._apply_grad = self._optimizer.apply_gradients(zip(accum_vars, tf.trainable_variables()))
-    
 
+        # Merge summary
+        tf.summary.scalar('accuracy', self._accuracy)
+        tf.summary.scalar('loss', self._loss)
+        self._merged_summary=tf.summary.merge_all()
+      
   def feed_dict(self,data,label=None):
     res = {}
     for i,gpu_id in enumerate(self._flags.GPUS):
@@ -75,6 +81,12 @@ class trainval(object):
         res[self._labels_v [i]] = label [i]
     return res
 
+  def make_summary(self, sess, data, label):
+    if not self._flags.TRAIN:
+      raise NotImplementedError    
+    feed_dict = self.feed_dict(data,label)
+    return sess.run(self._merged_summary,feed_dict=feed_dict)
+  
   def inference(self,data,label=None):
     feed_dict = self.feed_dict(data,label)
     ops  = [self._accum_grad_v]
@@ -83,13 +95,15 @@ class trainval(object):
       ops += [self._loss]
     return sess.run(ops, feed_dict = feed_dict)    
     
-  def accum_gradient(self, sess, data, label):
+  def accum_gradient(self, sess, data, label, summary=False):
     if not self._flags.TRAIN:
       raise NotImplementedError
     
     feed_dict = self.feed_dict(data,label)
     ops  = [self._accum_grad_v]
     ops += [self._accuracy, self._loss]
+    if summary:
+      ops += [self._merged_summary]
     return sess.run(ops, feed_dict = feed_dict)
 
   def zero_gradients(self, sess):
