@@ -1,0 +1,6 @@
+arxiv
+*~
+*.csv
+*.dat
+*.root
+*.pyc
