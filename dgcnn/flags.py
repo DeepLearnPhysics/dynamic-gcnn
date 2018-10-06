@@ -5,12 +5,12 @@ from main_funcs import train
 class DGCNN_FLAGS:
 
     # flags for model
-    NUM_CLASS     = 2
-    NUM_EDGE_CONV = 3
-    TRAIN         = True
-    KVALUE        = 20
-    DEBUG         = True
-    
+    NUM_CLASS = 2
+    TRAIN     = True
+    KVALUE    = 20
+    DEBUG     = True
+    EDGE_CONV_LAYERS  = 3
+    EDGE_CONV_FILTERS = 64
     # flags for train/inference
     SEED           = -1
     LEARNING_RATE  = 0.001
@@ -41,6 +41,10 @@ class DGCNN_FLAGS:
         parser.add_argument('-kv','--kvalue',type=int,default=self.KVALUE,help='K value [default: %s]' % self.KVALUE)
         parser.add_argument('--gpus', type=str, default='0',
                             help='GPUs to utilize (comma-separated integers')
+        parser.add_argument('-ecl','--edge_conv_layers',type=int, default=self.EDGE_CONV_LAYERS,
+                            help='Number of edge-convolution layers [default: %s]' % self.EDGE_CONV_LAYERS)
+        parser.add_argument('-ecf','--edge_conv_filters',type=str, default=str(self.EDGE_CONV_FILTERS),
+                            help='Number of filters in edge-convolution layers [default: %s]' % self.EDGE_CONV_FILTERS)
         parser.add_argument('-nc','--num_class', type=int, default=self.NUM_CLASS,
                             help='Number of classes [default: %s]' % self.NUM_CLASS)
         parser.add_argument('-np','--num_point', type=int, default=self.NUM_POINT,
@@ -111,6 +115,10 @@ class DGCNN_FLAGS:
         os.environ['CUDA_VISIBLE_DEVICES']=self.GPUS
         self.GPUS=[int(gpu) for gpu in self.GPUS.split(',')]
         self.INPUT_FILE=[str(f) for f in self.INPUT_FILE.split(',')]
+        if self.EDGE_CONV_FILTERS.find(',')>0:
+            self.EDGE_CONV_FILTERS = [int(v) for v in self.EDGE_CONV_FILTERS.split(',')]
+        else:
+            self.EDGE_CONV_FILTERS = int(self.EDGE_CONV_FILTERS)
         if self.SEED < 0:
             import time
             self.SEED = int(time.time())

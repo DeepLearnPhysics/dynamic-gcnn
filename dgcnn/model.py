@@ -8,11 +8,12 @@ import dgcnn
 
 def build(point_cloud, flags):
 
-  num_edge_conv = int(flags.NUM_EDGE_CONV)
+  num_edge_conv = int(flags.EDGE_CONV_LAYERS)
   is_training   = bool(flags.TRAIN)
   k = int(flags.KVALUE)
   debug = bool(flags.DEBUG)
   num_class = int(flags.NUM_CLASS)
+  num_filters = flags.EDGE_CONV_FILTERS
   
   net = point_cloud
   batch_size = net.get_shape()[0].value
@@ -21,7 +22,7 @@ def build(point_cloud, flags):
     print('\n')
     print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
 
-  tensors = dgcnn.ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=64, trainable=is_training, debug=debug)
+  tensors = dgcnn.ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=num_filters, trainable=is_training, debug=debug)
   
   concat = []
   for i in range(num_edge_conv):
