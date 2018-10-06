@@ -17,10 +17,11 @@ def build(point_cloud, flags):
   
   net = point_cloud
   batch_size = net.get_shape()[0].value
-  num_point  = net.get_shape()[1].value
+  #num_point  = net.get_shape()[1].value
+  num_point = tf.shape(net)[1]
   if debug:
     print('\n')
-    print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+    print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
   tensors = dgcnn.ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=num_filters, trainable=is_training, debug=debug)
   
@@ -38,23 +39,27 @@ def build(point_cloud, flags):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'MergedEdgeConv')
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   tensors.append(net)
 
-  net = slim.max_pool2d(net, kernel_size=[num_point,1], scope='maxpool0')
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  from tensorflow.python.ops import gen_nn_ops
+  net = gen_nn_ops.max_pool_v2(net, ksize=[1,num_point,1,1], strides=[1,1,1,1], padding='VALID', name='maxpool0')
+  #net = slim.max_pool2d(net, kernel_size=[num_point,1], scope='maxpool0')
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
+
+  net = tf.reshape(net,[batch_size,-1,1,1024])
   net  = tf.tile(net, [1, num_point, 1, 1])
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   concat = [net] + tensors
 
   net = tf.concat(values=concat, axis=3)
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
   net = dgcnn.ops.fc(net=net, repeat=2, num_filters=[512,256], trainable=is_training, debug=debug)
 
   if is_training:
     net = tf.nn.dropout(net, 0.7, None)
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
   net = slim.conv2d(inputs      = net,
                     num_outputs = num_class,
@@ -65,9 +70,9 @@ def build(point_cloud, flags):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'Final')
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
   net = tf.squeeze(net, [2])
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   return net
 

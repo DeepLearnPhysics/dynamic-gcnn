@@ -14,9 +14,10 @@ def iotest(flags):
   # IO configuration
   io = dgcnn.io_factory(flags)
   io.initialize()
-  for i in range(50):
+  for i in range(10):
     data,label,_ = io.next()
-    print(i,data.shape,label.shape)
+    #print(i,np.shape(data),np.shape(label))
+    print(i,data[0].shape,label[0].shape)
 
 def train(flags):
 
@@ -31,7 +32,7 @@ def train(flags):
   train_data,_,_ = io.next()
 
   # Trainer configuration
-  flags.NUM_CHANNEL = train_data.shape[-1]
+  flags.NUM_CHANNEL = train_data[0].shape[-1]
   trainer = dgcnn.trainval(flags)
   trainer.initialize()
 
@@ -142,8 +143,9 @@ def train(flags):
       accuracy = round_decimals(accuracy,4)
       tfrac = round_decimals(tspent_train/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
-      msg = 'Iteration %d (epoch %g) @ %s ... train time %g%% ... loss %g accuracy %g'
-      msg = msg % (iteration,epoch,tstamp_iteration,tfrac,loss,accuracy)
+      mem = sess.run(tf.contrib.memory_stats.MaxBytesInUse())
+      msg = 'Iteration %d (epoch %g) @ %s ... train time fraction %g%% max mem. %g ... loss %g accuracy %g'
+      msg = msg % (iteration,epoch,tstamp_iteration,tfrac,mem,loss,accuracy)
       print(msg)
       if csv_logger: csv_logger.flush()
       if train_writer: train_writer.flush()

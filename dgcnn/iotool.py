@@ -44,13 +44,12 @@ class io_larcv(io_base):
         for f in self._flags.INPUT_FILE:
             ch_data.AddFile(f)
             ch_label.AddFile(f)
-        self._num_entries = ch_data.GetEntries()
         self._data  = []
         self._label = []
         br_data,br_label=(None,None)
-        event_fraction = 1./self.num_entries() * 100.
+        event_fraction = 1./ch_data.GetEntries() * 100.
         total_point = 0.
-        for i in range(self.num_entries()):
+        for i in range(ch_data.GetEntries()):
             ch_data.GetEntry(i)
             ch_label.GetEntry(i)
             if br_data is None:
@@ -58,21 +57,26 @@ class io_larcv(io_base):
                 br_label = getattr(ch_label,'sparse3d_%s_branch' % self._flags.LABEL_KEY)
             num_point = br_data.as_vector().size()
             np_data  = np.zeros(shape=(num_point,4),dtype=np.float32)
-            np_label = np.zeros(shape=(num_point,4),dtype=np.float32)
+            np_label = np.zeros(shape=(num_point,1),dtype=np.float32)
             larcv.fill_3d_pcloud(br_data,  np_data)
             larcv.fill_3d_pcloud(br_label, np_label)
-            self._data.append(np.expand_dims(np_data,0))
-            self._label.append(np.expand_dims(np_label,0))
+            np_label = np_label.reshape([num_point]) - 1.
+            self._data.append(np_data)
+            self._label.append(np_label)
 
             total_point += np_data.size
             sys.stdout.write('Processed %d%% ... %d MB\r' % (int(event_fraction*i),int(total_point*4*2/1.e6)))
             sys.stdout.flush()
         sys.stdout.write('\n')
         sys.stdout.flush()
+        self._num_entries = len(self._data)
         
     def next(self):
-        idx = int(np.random.random() * self.num_entries())
-        return self._data[idx], self._label[idx], [idx]
+        start = int(np.random.random() * (self.num_entries() - self.batch_size()))
+        end   = start + self.batch_size()
+        idx   = np.arange(start,end,1)
+        #print(start,'=>',end)
+        return self._data[start:end], self._label[start:end], idx
             
 class io_h5(io_base):
 

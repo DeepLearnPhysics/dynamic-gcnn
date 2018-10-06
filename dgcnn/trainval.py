@@ -21,18 +21,22 @@ class trainval(object):
       loss_v     = []
       accuracy_v = []
       grad_v     = []
-
+      softmax_v  = []
       for i, gpu_id in enumerate(self._flags.GPUS):
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('GPU%d' % gpu_id) as scope:
             with tf.variable_scope("dgcnn",reuse=tf.AUTO_REUSE):
               points = tf.placeholder(tf.float32, 
-                                      shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT,self._flags.NUM_CHANNEL))
+                                      shape=(self._flags.MINIBATCH_SIZE,None,self._flags.NUM_CHANNEL))
+                                      #shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT,self._flags.NUM_CHANNEL))
               labels = tf.placeholder(tf.int32,
-                                      shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT))
+                                      shape=(self._flags.MINIBATCH_SIZE,None))
+                                      #shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT))
               self._points_v.append(points)
               self._labels_v.append(labels)
               pred = dgcnn.model.build(points, self._flags)
+              softmax = tf.nn.softmax(logits=pred)
+              softmax_v.append(softmax)
               loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=labels)
               loss = tf.reduce_mean(loss)
               loss_v.append(loss)
@@ -43,7 +47,8 @@ class trainval(object):
               if self._flags.TRAIN:
                 grad = self._optimizer.compute_gradients(loss)
                 grad_v.append(grad)
-            
+      # Softmax (simple concat)
+      self._softmax = tf.concat(softmax_v,axis=0)
       # Average loss & accuracy across GPUs
       self._loss     = tf.add_n(loss_v) / float(len(self._flags.GPUS))
       self._accuracy = tf.add_n(accuracy_v) / float(len(self._flags.GPUS))
@@ -76,7 +81,7 @@ class trainval(object):
   def feed_dict(self,data,label=None):
     res = {}
     for i,gpu_id in enumerate(self._flags.GPUS):
-      res[self._points_v [i]] = data  [i]
+      res[self._points_v [i]] = data [i]
       if label is not None:
         res[self._labels_v [i]] = label [i]
     return res
@@ -87,13 +92,12 @@ class trainval(object):
     feed_dict = self.feed_dict(data,label)
     return sess.run(self._merged_summary,feed_dict=feed_dict)
   
-  def inference(self,data,label=None):
+  def inference(self,sess,data,label=None):
     feed_dict = self.feed_dict(data,label)
-    ops  = [self._accum_grad_v]
-    ops += [self._accuracy]
+    ops  = [self._softmax]
     if label is not None:
-      ops += [self._loss]
-    return sess.run(ops, feed_dict = feed_dict)    
+      ops += [self._accuracy, self._loss]
+    return sess.run(ops, feed_dict = feed_dict)
     
   def accum_gradient(self, sess, data, label, summary=False):
     if not self._flags.TRAIN:

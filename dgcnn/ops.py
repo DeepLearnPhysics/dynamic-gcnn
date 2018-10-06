@@ -24,7 +24,8 @@ def edges(points, k=20):
 
   points_central = points
   batch_size   = points.get_shape()[0].value
-  num_points   = points.get_shape()[1].value
+  #num_points   = points.get_shape()[1].value
+  num_points = tf.shape(points)[1]
   num_dims     = points.get_shape()[2].value
 
   idx_ = tf.range   (batch_size) * num_points
@@ -43,7 +44,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
 
   net = point_cloud
   net = edges(net, k=k)
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net = slim.conv2d(inputs      = net,
                     num_outputs = num_filters,
                     kernel_size = 1,
@@ -53,13 +54,13 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'conv0')
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net_max  = tf.reduce_max  (net, axis=-2, keep_dims=True)
   net_mean = tf.reduce_mean (net, axis=-2, keep_dims=True)
   net = tf.concat([net_max, net_mean], axis=-1)
-  if debug: print('Shape {:s} ... Name {:s}'.format(net_max.shape.as_list(),net_max.name))
-  if debug: print('Shape {:s} ... Name {:s}'.format(net_mean.shape.as_list(),net_mean.name))
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net_max.shape,net_max.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net_mean.shape,net_mean.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net = slim.conv2d(inputs      = net,
                     num_outputs = 64,
                     kernel_size = 1,
@@ -69,7 +70,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     normalizer_fn = slim.batch_norm,
                     #activation_fn = None,
                     scope       = 'conv1')
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
   return [net_max, net_mean, net]
 
@@ -118,6 +119,6 @@ def fc(net, repeat, num_filters, trainable, debug=False):
                       normalizer_fn = slim.batch_norm,
                       #activation_fn = None,
                       scope       = scope)
-    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape.as_list(),net.name))
+    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
   return net
