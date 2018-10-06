@@ -45,8 +45,8 @@ class DGCNN_FLAGS:
                             help='Number of classes [default: %s]' % self.NUM_CLASS)
         parser.add_argument('-np','--num_point', type=int, default=self.NUM_POINT,
                             help='Point number [default: %s]' % self.NUM_POINT)
-        parser.add_argument('-it','--iterations', type=int, default=self.ITERATION,
-                            help='Iterations to run [default: %s]' % self.ITERATION)
+        parser.add_argument('-it','--iteration', type=int, default=self.ITERATION,
+                            help='Iteration to run [default: %s]' % self.ITERATION)
         parser.add_argument('-bs','--batch_size', type=int, default=self.BATCH_SIZE,
                             help='Batch Size during training for updating weights [default: %s]' % self.BATCH_SIZE)
         parser.add_argument('-mp','--model_path', type=str, default=self.MODEL_PATH,
