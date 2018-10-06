@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import argparse, os, sys
-from main_funcs import train
+from main_funcs import train, iotest
 class DGCNN_FLAGS:
 
     # flags for model
@@ -11,6 +11,7 @@ class DGCNN_FLAGS:
     DEBUG     = True
     EDGE_CONV_LAYERS  = 3
     EDGE_CONV_FILTERS = 64
+    
     # flags for train/inference
     SEED           = -1
     LEARNING_RATE  = 0.001
@@ -33,6 +34,8 @@ class DGCNN_FLAGS:
     BATCH_SIZE = 1
     LOG_DIR    = 'log'
     MODEL_PATH = ''
+    DATA_KEY   = 'data'
+    LABEL_KEY  = 'label'
     
     def __init__(self):
         self._build_parsers()
@@ -59,6 +62,10 @@ class DGCNN_FLAGS:
                             help='IO handler type [default: %s]' % self.IO_TYPE)
         parser.add_argument('-if','--input_file',type=str,default=self.INPUT_FILE,
                             help='comma-separated input file list [default: %s]' % self.INPUT_FILE)
+        parser.add_argument('-dkey','--data_key',type=str,default=self.DATA_KEY,
+                            help='A keyword to fetch data from file [default: %s]' % self.DATA_KEY)
+        parser.add_argument('-lkey','--label_key',type=str,default=self.LABEL_KEY,
+                            help='A keyword to fetch label from file [default: %s]' % self.LABEL_KEY)
         return parser
         
     def _build_parsers(self):
@@ -88,12 +95,16 @@ class DGCNN_FLAGS:
                                   help='Number of the latest checkpoint to keep [default: %s]' % self.CHECKPOINT_NUM)
         train_parser.add_argument('-chkh','--checkpoint_hour', type=float, default=self.CHECKPOINT_HOUR,
                                   help='Period (in hours) to store checkpoint [default: %s]' % self.CHECKPOINT_HOUR)
+        # IO test parser
+        iotest_parser = subparsers.add_parser("iotest", help="Test iotools for Edge-GCNN")
+        
         # attach common parsers
-        self.train_parser = self._attach_common_args(train_parser)
-
+        self.train_parser  = self._attach_common_args(train_parser)
+        self.iotest_parser = self._attach_common_args(iotest_parser)
+        
         # attach executables
         self.train_parser.set_defaults(func=train)
-
+        self.iotest_parser.set_defaults(func=iotest)
     def parse_args(self):
         args = self.parser.parse_args()
         self.update(vars(args))

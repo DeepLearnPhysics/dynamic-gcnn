@@ -10,6 +10,14 @@ def round_decimals(val,digits):
   factor = float(np.power(10,digits))
   return int(val * factor+0.5) / factor
 
+def iotest(flags):
+  # IO configuration
+  io = dgcnn.io_factory(flags)
+  io.initialize()
+  for i in range(50):
+    data,label,_ = io.next()
+    print(i,data.shape,label.shape)
+
 def train(flags):
 
   # assert
