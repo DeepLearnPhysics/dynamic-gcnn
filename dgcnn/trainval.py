@@ -23,7 +23,7 @@ class trainval(object):
       grad_v     = []
 
       for i, gpu_id in enumerate(self._flags.GPUS):
-        with tf.device('/gpu:%d' % gpu_id):
+        with tf.device('/gpu:%d' % i):
           with tf.name_scope('GPU%d' % gpu_id) as scope:
             with tf.variable_scope("dgcnn",reuse=tf.AUTO_REUSE):
               points = tf.placeholder(tf.float32, 
