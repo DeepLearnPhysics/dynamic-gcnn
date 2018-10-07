@@ -10,6 +10,9 @@ def round_decimals(val,digits):
   factor = float(np.power(10,digits))
   return int(val * factor+0.5) / factor
 
+def iteration_from_filename(file_name):
+  return int((file_name.split('-'))[-1])
+
 def iotest(flags):
   # IO configuration
   io = dgcnn.io_factory(flags)
@@ -55,13 +58,15 @@ def train(flags):
     
   saver = tf.train.Saver(max_to_keep=flags.CHECKPOINT_NUM,
                          keep_checkpoint_every_n_hours=flags.CHECKPOINT_HOUR)
-  if flags.MODEL_PATH:
-    saver.restore(sess, flags.MODEL_PATH)
   if flags.WEIGHT_PREFIX:
     save_dir = flags.WEIGHT_PREFIX[0:flags.WEIGHT_PREFIX.rfind('/')]
     if save_dir and not os.path.isdir(save_dir): os.makedirs(save_dir)
 
-  iteration  = 0
+  iteration = 0
+  if flags.MODEL_PATH:
+    saver.restore(sess, flags.MODEL_PATH)
+    iteration = iteration_from_filename(flags.MODEL_PATH)+1
+
   tsum       = 0.
   tsum_train = 0.
   tsum_io    = 0.

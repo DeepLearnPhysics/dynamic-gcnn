@@ -56,6 +56,7 @@ class io_larcv(io_base):
                 br_data  = getattr(ch_data, 'sparse3d_%s_branch' % self._flags.DATA_KEY)
                 br_label = getattr(ch_label,'sparse3d_%s_branch' % self._flags.LABEL_KEY)
             num_point = br_data.as_vector().size()
+            if num_point < 256: continue
             np_data  = np.zeros(shape=(num_point,4),dtype=np.float32)
             np_label = np.zeros(shape=(num_point,1),dtype=np.float32)
             larcv.fill_3d_pcloud(br_data,  np_data)
