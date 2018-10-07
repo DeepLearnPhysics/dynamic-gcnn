@@ -156,7 +156,7 @@ def train(flags):
       if train_writer: train_writer.flush()
     # Increment iteration counter
     iteration +=1
-      
+
   train_writer.close()
   csv_logger.close()
-  
+  io.finalize()
