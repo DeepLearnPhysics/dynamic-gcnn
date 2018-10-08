@@ -47,8 +47,8 @@ class trainval(object):
               if self._flags.TRAIN:
                 grad = self._optimizer.compute_gradients(loss)
                 grad_v.append(grad)
-      # Softmax (simple concat)
-      self._softmax = tf.concat(softmax_v,axis=0)
+      # Softmax 
+      self._softmax_v = softmax_v
       # Average loss & accuracy across GPUs
       self._loss     = tf.add_n(loss_v) / float(len(self._flags.GPUS))
       self._accuracy = tf.add_n(accuracy_v) / float(len(self._flags.GPUS))
@@ -94,7 +94,7 @@ class trainval(object):
   
   def inference(self,sess,data,label=None):
     feed_dict = self.feed_dict(data,label)
-    ops  = [self._softmax]
+    ops = list(self._softmax_v)
     if label is not None:
       ops += [self._accuracy, self._loss]
     return sess.run(ops, feed_dict = feed_dict)

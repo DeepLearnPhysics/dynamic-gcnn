@@ -11,7 +11,7 @@ def k_nn(points, k):
   M = points
   transpose  = tf.transpose(M, perm=[0, 2, 1])
   inner_prod = tf.matmul(M, transpose)
-  squared    = tf.reduce_sum(tf.square(M), axis=-1, keep_dims=True)
+  squared    = tf.reduce_sum(tf.square(M), axis=-1, keepdims=True)
   squared_tranpose = tf.transpose(squared, perm=[0, 2, 1])
   nn_dist = squared + squared_tranpose - 2 * inner_prod
   # Next pick the top k shortest ones
@@ -23,10 +23,11 @@ def edges(points, k=20):
   knn_idx = k_nn(points, k)
 
   points_central = points
-  batch_size   = points.get_shape()[0].value
-  #num_points   = points.get_shape()[1].value
+  #batch_size = points.get_shape()[0].value
+  batch_size = tf.shape(points)[0]
   num_points = tf.shape(points)[1]
-  num_dims     = points.get_shape()[2].value
+  #num_dims   = points.get_shape()[2].value
+  num_dims   = tf.shape(points)[2]
 
   idx_ = tf.range   (batch_size) * num_points
   idx_ = tf.reshape (idx_, [batch_size, 1, 1])
@@ -55,8 +56,8 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     #activation_fn = None,
                     scope       = 'conv0')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
-  net_max  = tf.reduce_max  (net, axis=-2, keep_dims=True)
-  net_mean = tf.reduce_mean (net, axis=-2, keep_dims=True)
+  net_max  = tf.reduce_max  (net, axis=-2, keepdims=True)
+  net_mean = tf.reduce_mean (net, axis=-2, keepdims=True)
   net = tf.concat([net_max, net_mean], axis=-1)
   if debug: print('Shape {:s} ... Name {:s}'.format(net_max.shape,net_max.name))
   if debug: print('Shape {:s} ... Name {:s}'.format(net_mean.shape,net_mean.name))

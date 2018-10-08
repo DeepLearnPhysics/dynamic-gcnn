@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import argparse, os, sys
-from main_funcs import train, iotest
+from main_funcs import train, iotest, inference
+from distutils.util import strtobool
 class DGCNN_FLAGS:
 
     # flags for model
@@ -20,7 +21,7 @@ class DGCNN_FLAGS:
     WEIGHT_PREFIX  = './weights/snapshot'
     KVALUE         = 20
     NUM_POINT      = 2048
-    NUM_CHANNEL    = 4
+    NUM_CHANNEL    = -1
     ITERATION      = 10000
     REPORT_STEP    = 100
     SUMMARY_STEP     = 20
@@ -31,17 +32,25 @@ class DGCNN_FLAGS:
     # flags for IO
     IO_TYPE    = 'h5'
     INPUT_FILE = '/scratch/kterao/dlprod_ppn_v08/dgcnn_p02_test_4ch.hdf5'
+    OUTPUT_FILE = ''
     BATCH_SIZE = 1
-    LOG_DIR    = 'log'
+    LOG_DIR    = ''
     MODEL_PATH = ''
     DATA_KEY   = 'data'
     LABEL_KEY  = 'label'
+    SHUFFLE    = 1
     
     def __init__(self):
         self._build_parsers()
 
     def _attach_common_args(self,parser):
         parser.add_argument('-kv','--kvalue',type=int,default=self.KVALUE,help='K value [default: %s]' % self.KVALUE)
+        parser.add_argument('-db','--debug',type=strtobool,default=self.DEBUG,
+                            help='Extra verbose mode for debugging [default: %s]' % self.DEBUG)
+        parser.add_argument('-ld','--log_dir', default=self.LOG_DIR,
+                            help='Log dir [default: %s]' % self.LOG_DIR)
+        parser.add_argument('-sh','--shuffle',type=strtobool,default=self.SHUFFLE,
+                            help='Shuffle the data entries [default: %s]' % self.SHUFFLE)
         parser.add_argument('--gpus', type=str, default='0',
                             help='GPUs to utilize (comma-separated integers')
         parser.add_argument('-ecl','--edge_conv_layers',type=int, default=self.EDGE_CONV_LAYERS,
@@ -56,12 +65,18 @@ class DGCNN_FLAGS:
                             help='Iteration to run [default: %s]' % self.ITERATION)
         parser.add_argument('-bs','--batch_size', type=int, default=self.BATCH_SIZE,
                             help='Batch Size during training for updating weights [default: %s]' % self.BATCH_SIZE)
+        parser.add_argument('-mbs','--minibatch_size', type=int, default=self.MINIBATCH_SIZE,
+                            help='Mini-Batch Size during training for each GPU [default: %s]' % self.MINIBATCH_SIZE)
+        parser.add_argument('-rs','--report_step', type=int, default=self.REPORT_STEP,
+                            help='Period (in steps) to print out loss and accuracy [default: %s]' % self.REPORT_STEP)
         parser.add_argument('-mp','--model_path', type=str, default=self.MODEL_PATH,
                             help='model checkpoint file path [default: %s]' % self.MODEL_PATH)
         parser.add_argument('-io','--io_type',type=str,default=self.IO_TYPE,
                             help='IO handler type [default: %s]' % self.IO_TYPE)
         parser.add_argument('-if','--input_file',type=str,default=self.INPUT_FILE,
                             help='comma-separated input file list [default: %s]' % self.INPUT_FILE)
+        parser.add_argument('-of','--output_file',type=str,default=self.OUTPUT_FILE,
+                            help='output file name [default: %s]' % self.OUTPUT_FILE)
         parser.add_argument('-dkey','--data_key',type=str,default=self.DATA_KEY,
                             help='A keyword to fetch data from file [default: %s]' % self.DATA_KEY)
         parser.add_argument('-lkey','--label_key',type=str,default=self.LABEL_KEY,
@@ -77,16 +92,10 @@ class DGCNN_FLAGS:
         train_parser = subparsers.add_parser("train", help="Train Edge-GCNN")
         train_parser.add_argument('-sd','--seed', default=self.SEED,
                                   help='Seed for random number generators [default: %s]' % self.SEED)
-        train_parser.add_argument('-ld','--log_dir', default=self.LOG_DIR,
-                                  help='Log dir [default: %s]' % self.LOG_DIR)
         train_parser.add_argument('-wp','--weight_prefix', default=self.WEIGHT_PREFIX,
                                   help='Prefix (directory + file prefix) for snapshots of weights [default: %s]' % self.WEIGHT_PREFIX)
-        train_parser.add_argument('-mbs','--minibatch_size', type=int, default=self.MINIBATCH_SIZE,
-                                  help='Mini-Batch Size during training for each GPU [default: %s]' % self.MINIBATCH_SIZE)
         train_parser.add_argument('-lr','--learning_rate', type=float, default=self.LEARNING_RATE,
                                   help='Initial learning rate [default: %s]' % self.LEARNING_RATE)
-        train_parser.add_argument('-rs','--report_step', type=int, default=self.REPORT_STEP,
-                                  help='Period (in steps) to print out loss and accuracy [default: %s]' % self.REPORT_STEP)
         train_parser.add_argument('-ss','--summary_step', type=int, default=self.SUMMARY_STEP,
                                   help='Period (in steps) to store summary in tensorboard log [default: %s]' % self.SUMMARY_STEP)
         train_parser.add_argument('-chks','--checkpoint_step', type=int, default=self.CHECKPOINT_STEP,
@@ -95,15 +104,20 @@ class DGCNN_FLAGS:
                                   help='Number of the latest checkpoint to keep [default: %s]' % self.CHECKPOINT_NUM)
         train_parser.add_argument('-chkh','--checkpoint_hour', type=float, default=self.CHECKPOINT_HOUR,
                                   help='Period (in hours) to store checkpoint [default: %s]' % self.CHECKPOINT_HOUR)
+        
+        # inference parser
+        inference_parser = subparsers.add_parser("inference",help="Run inference of Edge-GCNN")
         # IO test parser
         iotest_parser = subparsers.add_parser("iotest", help="Test iotools for Edge-GCNN")
         
         # attach common parsers
-        self.train_parser  = self._attach_common_args(train_parser)
-        self.iotest_parser = self._attach_common_args(iotest_parser)
+        self.train_parser     = self._attach_common_args(train_parser)
+        self.inference_parser = self._attach_common_args(inference_parser)
+        self.iotest_parser    = self._attach_common_args(iotest_parser)
         
         # attach executables
         self.train_parser.set_defaults(func=train)
+        self.inference_parser.set_defaults(func=inference)
         self.iotest_parser.set_defaults(func=iotest)
     def parse_args(self):
         args = self.parser.parse_args()

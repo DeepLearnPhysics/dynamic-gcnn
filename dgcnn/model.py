@@ -16,7 +16,8 @@ def build(point_cloud, flags):
   num_filters = flags.EDGE_CONV_FILTERS
   
   net = point_cloud
-  batch_size = net.get_shape()[0].value
+  batch_size = tf.shape(net)[0]
+  #batch_size = net.get_shape()[0].value
   #num_point  = net.get_shape()[1].value
   num_point = tf.shape(net)[1]
   if debug:
