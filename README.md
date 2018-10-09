@@ -1,6 +1,6 @@
 # dgcnn
 
-This is an implementation of 3D point cloud semantic segmentation for [Dynamic Graph Convolutional Neural Network](https://arxiv.org/abs/1801.07829). **[WARNING:] this impelementation is still on-going** so watch out if you want to use it. This warning sentence will be removed when ready with reproducible result with open data sample.
+This is an implementation of 3D point cloud semantic segmentation for [Dynamic Graph Convolutional Neural Network](https://arxiv.org/abs/1801.07829). 
 
 ### Requirements
 * `tensorflow >= v1.3`
