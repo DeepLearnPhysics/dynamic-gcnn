@@ -6,13 +6,14 @@ from distutils.util import strtobool
 class DGCNN_FLAGS:
 
     # flags for model
-    NUM_CLASS = 2
-    TRAIN     = True
-    KVALUE    = 20
-    DEBUG     = True
+    NUM_CLASS  = 2
+    MODEL_NAME = "dgcnn"
+    TRAIN      = True
+    KVALUE     = 20
+    DEBUG      = True
     EDGE_CONV_LAYERS  = 3
     EDGE_CONV_FILTERS = 64
-    FC_LAYERS = 2
+    FC_LAYERS  = 2
     FC_FILTERS = [512,256]
     
     # flags for train/inference
@@ -75,6 +76,8 @@ class DGCNN_FLAGS:
                             help='Mini-Batch Size during training for each GPU [default: %s]' % self.MINIBATCH_SIZE)
         parser.add_argument('-rs','--report_step', type=int, default=self.REPORT_STEP,
                             help='Period (in steps) to print out loss and accuracy [default: %s]' % self.REPORT_STEP)
+        parser.add_argument('-mn','--model_name', type=str, default=self.MODEL_NAME,
+                            help='model name identifier [default: %s]' % self.MODEL_NAME)
         parser.add_argument('-mp','--model_path', type=str, default=self.MODEL_PATH,
                             help='model checkpoint file path [default: %s]' % self.MODEL_PATH)
         parser.add_argument('-io','--io_type',type=str,default=self.IO_TYPE,

@@ -39,7 +39,7 @@ def edges(points, k=20):
   edge_feature = tf.concat([points_central, points_neighbors-points_central], axis=-1)
   return edge_feature
 
-def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
+def edge_conv(point_cloud, k, num_filters, trainable, activation=tf.nn.relu, debug=False):
 
   net = point_cloud
   net = edges(net, k=k)
@@ -66,6 +66,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     trainable   = trainable,
                     padding     = 'VALID',
                     normalizer_fn = slim.batch_norm,
+                    activation_fn = activation,
                     scope       = 'conv1')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
@@ -91,6 +92,48 @@ def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False
     scope = 'EdgeConv%d' % i
     with tf.variable_scope(scope):
       tensors += edge_conv(net, k[i], num_filters[i], trainable, debug)
+      net = tensors[-1]
+      net = tf.squeeze(net,axis=-2)
+
+  return tensors
+
+def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False):
+  
+  repeat = int(repeat)
+  if not type(k) == type(list()):
+    k = [int(k)] * repeat
+  elif not len(k) == repeat:
+    print('Length of k != repeat')
+    raise ValueError
+  if not type(num_filters) == type(list()):
+    num_filters = [int(num_filters)] * repeat
+  elif not len(num_filters) == repeat:
+    print('Length of num_filters != repeat')
+    raise ValueError
+
+  net      = point_cloud
+  tensors  = []
+  shortcut = None
+  for i in range(repeat):
+    scope = 'EdgeConv%d' % i
+    with tf.variable_scope(scope):
+      if shortcut is None: 
+        tensors += edge_conv(net, k[i], num_filters[i], trainable, debug)
+      else:
+        tensors += edge_conv(net, k[i], num_filters[i], trainable, activation=None, debug)
+        if not num_filters[i] == num_filters[i-1]:
+          shortcut = slim.conv2d(inputs      = shortcut,
+                                 num_outputs = num_filters[i],
+                                 kernel_size = 1,
+                                 stride      = 1,
+                                 trainable   = trainable,
+                                 padding     = 'VALID',
+                                 normalizer_fn = slim.batch_norm,
+                                 activation_fn = None,
+                                 scope       = 'shortcut')
+        tensors[-1] = tf.nn.relu(shortcut + tensors[-1])
+        
+      shortcut = net
       net = tensors[-1]
       net = tf.squeeze(net,axis=-2)
 

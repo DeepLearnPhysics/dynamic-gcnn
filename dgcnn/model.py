@@ -24,8 +24,24 @@ def build(point_cloud, flags):
     print('\n')
     print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
-  tensors = dgcnn.ops.repeat_edge_conv(net, repeat=num_edge_conv, k=k, num_filters=num_filters, trainable=is_training, debug=debug)
-  
+  if flags.MODEL_NAME == 'dgcnn':
+    tensors = dgcnn.ops.repeat_edge_conv(net,
+                                         repeat=num_edge_conv,
+                                         k=k,
+                                         num_filters=num_filters,
+                                         trainable=is_training,
+                                         debug=debug)
+  elif flags.MODEL_NAME == 'residual-dgcnn':
+    tensors = dgcnn.ops.repeat_residual_edge_conv(net,
+                                                  repeat=num_edge_conv,
+                                                  k=k,
+                                                  num_filters=num_filters,
+                                                  trainable=is_training,
+                                                  debug=debug)
+  else:
+    print('Unsupported MODEL_NAME: %s' % flags.MODEL_NAME)
+    raise NotImplementedError
+    
   concat = []
   for i in range(num_edge_conv):
     concat.append(tensors[3*i+2])
@@ -70,7 +86,7 @@ def build(point_cloud, flags):
                     scope       = 'Final')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
-  net = tf.squeeze(net, [2])
+  net = tf.squeeze(net, axis=-2)
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   return net
 
