@@ -23,10 +23,8 @@ def edges(points, k=20):
   knn_idx = k_nn(points, k)
 
   points_central = points
-  #batch_size = points.get_shape()[0].value
   batch_size = tf.shape(points)[0]
   num_points = tf.shape(points)[1]
-  #num_dims   = points.get_shape()[2].value
   num_dims   = tf.shape(points)[2]
 
   idx_ = tf.range   (batch_size) * num_points
@@ -53,7 +51,6 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     trainable   = trainable,
                     padding     = 'VALID',
                     normalizer_fn = slim.batch_norm,
-                    #activation_fn = None,
                     scope       = 'conv0')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net_max  = tf.reduce_max  (net, axis=-2, keepdims=True)
@@ -66,10 +63,9 @@ def edge_conv(point_cloud, k, num_filters, trainable, debug=False):
                     num_outputs = 64,
                     kernel_size = 1,
                     stride      = 1,
-                    trainable   = True,
+                    trainable   = trainable,
                     padding     = 'VALID',
                     normalizer_fn = slim.batch_norm,
-                    #activation_fn = None,
                     scope       = 'conv1')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
@@ -118,7 +114,6 @@ def fc(net, repeat, num_filters, trainable, debug=False):
                       trainable   = trainable,
                       padding     = 'VALID',
                       normalizer_fn = slim.batch_norm,
-                      #activation_fn = None,
                       scope       = scope)
     if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 

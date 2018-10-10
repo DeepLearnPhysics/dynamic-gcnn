@@ -12,6 +12,8 @@ class DGCNN_FLAGS:
     DEBUG     = True
     EDGE_CONV_LAYERS  = 3
     EDGE_CONV_FILTERS = 64
+    FC_LAYERS = 2
+    FC_FILTERS = [512,256]
     
     # flags for train/inference
     SEED           = -1
@@ -57,6 +59,10 @@ class DGCNN_FLAGS:
                             help='Number of edge-convolution layers [default: %s]' % self.EDGE_CONV_LAYERS)
         parser.add_argument('-ecf','--edge_conv_filters',type=str, default=str(self.EDGE_CONV_FILTERS),
                             help='Number of filters in edge-convolution layers [default: %s]' % self.EDGE_CONV_FILTERS)
+        parser.add_argument('-fcl','--fc_layers',type=int, default=self.FC_LAYERS,
+                            help='Number of fully-connected layers [default: %s]' % self.FC_LAYERS)
+        parser.add_argument('-fcf','--fc_filters',type=str, default=str(self.FC_FILTERS),
+                            help='Number of filters in fully-connected layers [default: %s]' % self.FC_FILTERS)
         parser.add_argument('-nc','--num_class', type=int, default=self.NUM_CLASS,
                             help='Number of classes [default: %s]' % self.NUM_CLASS)
         parser.add_argument('-np','--num_point', type=int, default=self.NUM_POINT,
@@ -144,6 +150,10 @@ class DGCNN_FLAGS:
             self.EDGE_CONV_FILTERS = [int(v) for v in self.EDGE_CONV_FILTERS.split(',')]
         else:
             self.EDGE_CONV_FILTERS = int(self.EDGE_CONV_FILTERS)
+        if self.FC_FILTERS.find(',')>0:
+            self.FC_FILTERS = [int(v) for v in self.FC_FILTERS.split(',')]
+        else:
+            self.FC_FILTERS = int(self.FC_FILTERS)
         if self.SEED < 0:
             import time
             self.SEED = int(time.time())
