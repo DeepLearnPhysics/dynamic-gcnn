@@ -112,22 +112,29 @@ IOManager: {
             self._fout.initialize()
             
     def next(self):
+        data,label=(None,None)
         start,end=(-1,-1)
         if self._flags.SHUFFLE:
             start = int(np.random.random() * (self.num_entries() - self.batch_size()))
             end   = start + self.batch_size()
-            idx   = [self._last_entry+1]
+            idx   = np.arange(start,end,1)
+            data = self._data[start:end]
+            if len(self._label) > 0: label = self._label[start:end]
         else:
             start = self._last_entry+1
             end   = start + self.batch_size()
             if end < self.num_entries():
-                idx = np.arange(start,end)
+                idx = np.arange(start,end,1)
+                data = self._data[start:end]
+                if len(self._label) > 0: label = self._label[start:end]
             else:
-                idx = np.concatenate([np.arange(start,self.num_entries()),np.arange(0,end-self.num_entries())])
+                idx = np.concatenate([np.arange(start,self.num_entries(),1),np.arange(0,end-self.num_entries(),1)])
+                data = self._data[start:] + self._data[0:end-self.num_entries()]
+                if len(self._label) > 0: label = self._label[start:] + self._label[0:end-self.num_entries()]
         self._last_entry = idx[-1]
         if len(self._label) < 1:
-            return self._data[start:end], None, idx
-        return self._data[start:end], self._label[start:end], idx
+            return data,None,idx
+        return data,label,idx
 
     def store(self,idx,softmax):
         from larcv import larcv
@@ -231,7 +238,7 @@ class io_h5(io_base):
 
     def next(self):
         idx = None
-        if self.SHUFFLE:
+        if self._flags.SHUFFLE:
             idx = np.arange(self.num_entries())
             np.random.shuffle(idx)
             idx = idx[0:self.batch_size()]

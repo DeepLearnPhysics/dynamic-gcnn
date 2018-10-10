@@ -17,11 +17,14 @@ def iotest(flags):
   # IO configuration
   io = dgcnn.io_factory(flags)
   io.initialize()
-  for i in range(10):
-    data,label,_ = io.next()
-    #print(i,np.shape(data),np.shape(label))
-    print(i,data[0].shape,label[0].shape)
-
+  num_entries = io.num_entries()
+  ctr = 0
+  while ctr < num_entries:
+    data,label,idx=io.next()
+    print(ctr,'/',num_entries,'...',idx,data[0].shape,label[0].shape)
+    ctr += len(data)
+  io.finalize()
+  
 class Handlers:
   sess         = None
   data_io      = None
@@ -47,7 +50,9 @@ def prepare(flags):
   handlers = Handlers()
   # assert
   if flags.BATCH_SIZE % (flags.MINIBATCH_SIZE * len(flags.GPUS)):
-    sys.stderr.write('--batch_size must be a modular of --gpus * --minibatch_size\n')
+    msg = '--batch_size (%d) must be a modular of --gpus (%d) * --minibatch_size (%d)\n'
+    msg = msg % (flags.BATCH_SIZE,flags.MINIBATCH_SIZE,len(flags.GPUS))
+    sys.stderr.write(msg)
     sys.exit(1)
 
   # IO configuration
@@ -69,15 +74,6 @@ def prepare(flags):
                   tf.local_variables_initializer())
   handlers.sess.run(init)
 
-  if flags.LOG_DIR:
-    if not os.path.exists(flags.LOG_DIR): os.mkdir(flags.LOG_DIR)
-    handlers.train_logger = tf.summary.FileWriter(flags.LOG_DIR)
-    handlers.train_logger.add_graph(handlers.sess.graph)
-    logname = '%s/train_log.csv' % flags.LOG_DIR
-    if not flags.TRAIN:
-      logname = '%s/inference_log.csv' % flags.LOG_DIR
-    handlers.csv_logger = open(logname,'w')
-
   handlers.weight_io = tf.train.Saver(max_to_keep=flags.CHECKPOINT_NUM,
                                       keep_checkpoint_every_n_hours=flags.CHECKPOINT_HOUR)
   if flags.WEIGHT_PREFIX:
@@ -85,9 +81,20 @@ def prepare(flags):
     if save_dir and not os.path.isdir(save_dir): os.makedirs(save_dir)
 
   handlers.iteration = 0
+  loaded_iteration   = 0
   if flags.MODEL_PATH:
     handlers.weight_io.restore(handlers.sess, flags.MODEL_PATH)
-    if flags.TRAIN: handlers.iteration = iteration_from_filename(flags.MODEL_PATH)+1
+    loaded_iteration = iteration_from_filename(flags.MODEL_PATH)
+    if flags.TRAIN: handlers.iteration = loaded_iteration+1
+
+  if flags.LOG_DIR:
+    if not os.path.exists(flags.LOG_DIR): os.mkdir(flags.LOG_DIR)
+    handlers.train_logger = tf.summary.FileWriter(flags.LOG_DIR)
+    handlers.train_logger.add_graph(handlers.sess.graph)
+    logname = '%s/train_log-%07d.csv' % (flags.LOG_DIR,loaded_iteration)
+    if not flags.TRAIN:
+      logname = '%s/inference_log-%07d.csv' % (flags.LOG_DIR,loaded_iteration)
+    handlers.csv_logger = open(logname,'w')
     
   return handlers
     
