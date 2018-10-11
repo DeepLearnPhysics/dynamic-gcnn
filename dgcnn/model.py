@@ -31,7 +31,7 @@ def build(point_cloud, flags):
                                          num_filters=num_edge_filters,
                                          trainable=is_training,
                                          debug=debug)
-  elif flags.MODEL_NAME == 'residual-dgcnn':
+  elif flags.MODEL_NAME in ['residual-dgcnn','residual-dgcnn-nofc']:
     tensors = dgcnn.ops.repeat_residual_edge_conv(net,
                                                   repeat=num_edge_conv,
                                                   k=k,
@@ -41,6 +41,21 @@ def build(point_cloud, flags):
   else:
     print('Unsupported MODEL_NAME: %s' % flags.MODEL_NAME)
     raise NotImplementedError
+
+  if flags.MODEL_NAME == 'residual-dgcnn-nofc':
+    net = slim.conv2d(inputs      = tensors[-1],
+                      num_outputs = num_class,
+                      kernel_size = 1,
+                      stride      = 1,
+                      trainable   = True,
+                      padding     = 'VALID',
+                      normalizer_fn = slim.batch_norm,
+                      scope       = 'Final')
+    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
+    
+    net = tf.squeeze(net, axis=-2)
+    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
+    return net
     
   concat = []
   for i in range(num_edge_conv):
