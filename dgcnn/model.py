@@ -11,7 +11,7 @@ def build(point_cloud, flags):
   num_edge_conv = int(flags.EDGE_CONV_LAYERS)
   num_edge_filters = flags.EDGE_CONV_FILTERS
   num_fc = int(flags.FC_LAYERS)
-  num_fc_filters = int(flags.FC_FILTERS)
+  num_fc_filters = flags.FC_FILTERS
   is_training   = bool(flags.TRAIN)
   k = int(flags.KVALUE)
   debug = bool(flags.DEBUG)
@@ -28,14 +28,14 @@ def build(point_cloud, flags):
     tensors = dgcnn.ops.repeat_edge_conv(net,
                                          repeat=num_edge_conv,
                                          k=k,
-                                         num_filters=num_filters,
+                                         num_filters=num_edge_filters,
                                          trainable=is_training,
                                          debug=debug)
   elif flags.MODEL_NAME == 'residual-dgcnn':
     tensors = dgcnn.ops.repeat_residual_edge_conv(net,
                                                   repeat=num_edge_conv,
                                                   k=k,
-                                                  num_filters=num_filters,
+                                                  num_filters=num_edge_filters,
                                                   trainable=is_training,
                                                   debug=debug)
   else:

@@ -14,7 +14,7 @@ class DGCNN_FLAGS:
     EDGE_CONV_LAYERS  = 3
     EDGE_CONV_FILTERS = 64
     FC_LAYERS  = 2
-    FC_FILTERS = [512,256]
+    FC_FILTERS = '512,256'
     
     # flags for train/inference
     SEED           = -1

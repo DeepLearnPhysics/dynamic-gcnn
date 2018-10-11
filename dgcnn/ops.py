@@ -91,7 +91,7 @@ def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False
   for i in range(repeat):
     scope = 'EdgeConv%d' % i
     with tf.variable_scope(scope):
-      tensors += edge_conv(net, k[i], num_filters[i], trainable, debug)
+      tensors += edge_conv(net, k[i], num_filters[i], trainable, debug=debug)
       net = tensors[-1]
       net = tf.squeeze(net,axis=-2)
 
@@ -118,9 +118,9 @@ def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, de
     scope = 'EdgeConv%d' % i
     with tf.variable_scope(scope):
       if shortcut is None: 
-        tensors += edge_conv(net, k[i], num_filters[i], trainable, debug)
+        tensors += edge_conv(net, k[i], num_filters[i], trainable, debug=debug)
       else:
-        tensors += edge_conv(net, k[i], num_filters[i], trainable, activation=None, debug)
+        tensors += edge_conv(net, k[i], num_filters[i], trainable, activation=None, debug=debug)
         if not num_filters[i] == num_filters[i-1]:
           shortcut = slim.conv2d(inputs      = shortcut,
                                  num_outputs = num_filters[i],
@@ -132,9 +132,9 @@ def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, de
                                  activation_fn = None,
                                  scope       = 'shortcut')
         tensors[-1] = tf.nn.relu(shortcut + tensors[-1])
-        
-      shortcut = net
+
       net = tensors[-1]
+      shortcut = tensors[-1]
       net = tf.squeeze(net,axis=-2)
 
   return tensors

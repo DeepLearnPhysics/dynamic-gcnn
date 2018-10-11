@@ -202,7 +202,7 @@ def train_loop(flags,handlers):
 
 def inference_loop(flags,handlers):
   handlers.csv_logger.write('iter,epoch')
-  handlers.csv_logger.write(',titer,tinference,tio,')
+  handlers.csv_logger.write(',titer,tinference,tio')
   handlers.csv_logger.write(',tsumiter,tsuminference,tsumio')
   handlers.csv_logger.write(',loss,accuracy\n')
   tsum           = 0.
