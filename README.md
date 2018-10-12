@@ -1,6 +1,6 @@
 # dgcnn
 
-This is an implementation of 3D point cloud semantic segmentation for [Dynamic Graph Convolutional Neural Network](https://arxiv.org/abs/1801.07829). 
+This is an implementation of 3D point cloud semantic segmentation for [Dynamic Graph Convolutional Neural Network](https://arxiv.org/abs/1801.07829). The number of edge convolution layers, fully connected layers, and number of filters per each layer are all configurable. The implementation includes a few variations such as residual unit (edge convolution with identity mapping), with or without fully connected layers, etc.. Experimental results on DeepLearnPhysics open data set will be made available.
 
 ### Requirements
 * `tensorflow >= v1.3`
