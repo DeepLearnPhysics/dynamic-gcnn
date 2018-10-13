@@ -16,8 +16,9 @@ class trainval(object):
     with tf.device('/cpu:0'):
       self._optimizer = tf.train.AdamOptimizer(self._flags.LEARNING_RATE)
 
-      self._points_v = []
-      self._labels_v = []
+      self._points_v  = []
+      self._labels_v  = []
+      self._weights_v = []
       loss_v     = []
       accuracy_v = []
       grad_v     = []
@@ -37,14 +38,19 @@ class trainval(object):
               pred = dgcnn.model.build(points, self._flags)
               softmax = tf.nn.softmax(logits=pred)
               softmax_v.append(softmax)
-              loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=labels)
-              loss = tf.reduce_mean(loss)
-              loss_v.append(loss)
               correct  = tf.equal(tf.argmax(pred, 2), tf.to_int64(labels))
               accuracy = tf.reduce_mean(tf.cast(correct,tf.float32))
               accuracy_v.append(accuracy)
               # If training, compute gradients
               if self._flags.TRAIN:
+                loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=labels)
+                if self._flags.WEIGHT_KEY:
+                  weight = tf.placeholder(tf.float32,
+                                          shape=(self._flags.MINIBATCH_SIZE,None))
+                  self._weights_v.append(weight)
+                  loss = tf.multiply(loss,weight)
+                loss = tf.reduce_mean(loss)
+                loss_v.append(loss)
                 grad = self._optimizer.compute_gradients(loss)
                 grad_v.append(grad)
       # Softmax 
@@ -78,32 +84,34 @@ class trainval(object):
         tf.summary.scalar('loss', self._loss)
         self._merged_summary=tf.summary.merge_all()
       
-  def feed_dict(self,data,label=None):
+  def feed_dict(self,data,label=None,weight=None):
     res = {}
     for i,gpu_id in enumerate(self._flags.GPUS):
       res[self._points_v [i]] = data [i]
       if label is not None:
         res[self._labels_v [i]] = label [i]
+      if weight is not None:
+        res[self._weights_v [i]] = weight [i]
     return res
 
-  def make_summary(self, sess, data, label):
+  def make_summary(self, sess, data, label, weight):
     if not self._flags.TRAIN:
       raise NotImplementedError    
-    feed_dict = self.feed_dict(data,label)
+    feed_dict = self.feed_dict(data,label,weight)
     return sess.run(self._merged_summary,feed_dict=feed_dict)
   
-  def inference(self,sess,data,label=None):
-    feed_dict = self.feed_dict(data,label)
+  def inference(self,sess,data,label=None,weight=None):
+    feed_dict = self.feed_dict(data,label,weight)
     ops = list(self._softmax_v)
     if label is not None:
       ops += [self._accuracy, self._loss]
     return sess.run(ops, feed_dict = feed_dict)
     
-  def accum_gradient(self, sess, data, label, summary=False):
+  def accum_gradient(self, sess, data, label, weight=None, summary=False):
     if not self._flags.TRAIN:
       raise NotImplementedError
     
-    feed_dict = self.feed_dict(data,label)
+    feed_dict = self.feed_dict(data,label,weight)
     ops  = [self._accum_grad_v]
     ops += [self._accuracy, self._loss]
     if summary:

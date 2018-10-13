@@ -41,6 +41,7 @@ class DGCNN_FLAGS:
     MODEL_PATH = ''
     DATA_KEY   = 'data'
     LABEL_KEY  = 'label'
+    WEIGHT_KEY = 'weight'
     SHUFFLE    = 1
     
     def __init__(self):
@@ -113,11 +114,15 @@ class DGCNN_FLAGS:
                                   help='Number of the latest checkpoint to keep [default: %s]' % self.CHECKPOINT_NUM)
         train_parser.add_argument('-chkh','--checkpoint_hour', type=float, default=self.CHECKPOINT_HOUR,
                                   help='Period (in hours) to store checkpoint [default: %s]' % self.CHECKPOINT_HOUR)
+        train_parser.add_argument('-wkey','--weight_key',type=str,default=self.WEIGHT_KEY,
+                                  help='A keyword to fetch weight from file [default: %s]' % self.WEIGHT_KEY)
         
         # inference parser
         inference_parser = subparsers.add_parser("inference",help="Run inference of Edge-GCNN")
         # IO test parser
         iotest_parser = subparsers.add_parser("iotest", help="Test iotools for Edge-GCNN")
+        iotest_parser.add_argument('-wkey','--weight_key',type=str,default=self.WEIGHT_KEY,
+                                   help='A keyword to fetch weight from file [default: %s]' % self.WEIGHT_KEY)
         
         # attach common parsers
         self.train_parser     = self._attach_common_args(train_parser)
