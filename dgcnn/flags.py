@@ -41,7 +41,7 @@ class DGCNN_FLAGS:
     MODEL_PATH = ''
     DATA_KEY   = 'data'
     LABEL_KEY  = 'label'
-    WEIGHT_KEY = 'weight'
+    WEIGHT_KEY = ''
     SHUFFLE    = 1
     
     def __init__(self):
