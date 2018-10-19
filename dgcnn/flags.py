@@ -39,9 +39,7 @@ class DGCNN_FLAGS:
     BATCH_SIZE = 1
     LOG_DIR    = ''
     MODEL_PATH = ''
-    DATA_KEY   = 'data'
-    LABEL_KEY  = 'label'
-    WEIGHT_KEY = 'weight'
+    DATA_KEYS  = 'data'
     SHUFFLE    = 1
     
     def __init__(self):
@@ -87,10 +85,8 @@ class DGCNN_FLAGS:
                             help='comma-separated input file list [default: %s]' % self.INPUT_FILE)
         parser.add_argument('-of','--output_file',type=str,default=self.OUTPUT_FILE,
                             help='output file name [default: %s]' % self.OUTPUT_FILE)
-        parser.add_argument('-dkey','--data_key',type=str,default=self.DATA_KEY,
-                            help='A keyword to fetch data from file [default: %s]' % self.DATA_KEY)
-        parser.add_argument('-lkey','--label_key',type=str,default=self.LABEL_KEY,
-                            help='A keyword to fetch label from file [default: %s]' % self.LABEL_KEY)
+        parser.add_argument('-dkeys','--data_keys',type=str,default=self.DATA_KEYS,
+                            help='A keyword to fetch data from file [default: %s]' % self.DATA_KEYS)
         return parser
         
     def _build_parsers(self):
@@ -114,15 +110,11 @@ class DGCNN_FLAGS:
                                   help='Number of the latest checkpoint to keep [default: %s]' % self.CHECKPOINT_NUM)
         train_parser.add_argument('-chkh','--checkpoint_hour', type=float, default=self.CHECKPOINT_HOUR,
                                   help='Period (in hours) to store checkpoint [default: %s]' % self.CHECKPOINT_HOUR)
-        train_parser.add_argument('-wkey','--weight_key',type=str,default=self.WEIGHT_KEY,
-                                  help='A keyword to fetch weight from file [default: %s]' % self.WEIGHT_KEY)
         
         # inference parser
         inference_parser = subparsers.add_parser("inference",help="Run inference of Edge-GCNN")
         # IO test parser
         iotest_parser = subparsers.add_parser("iotest", help="Test iotools for Edge-GCNN")
-        iotest_parser.add_argument('-wkey','--weight_key',type=str,default=self.WEIGHT_KEY,
-                                   help='A keyword to fetch weight from file [default: %s]' % self.WEIGHT_KEY)
         
         # attach common parsers
         self.train_parser     = self._attach_common_args(train_parser)
@@ -154,6 +146,7 @@ class DGCNN_FLAGS:
         os.environ['CUDA_VISIBLE_DEVICES']=self.GPUS
         self.GPUS=[int(gpu) for gpu in self.GPUS.split(',')]
         self.INPUT_FILE=[str(f) for f in self.INPUT_FILE.split(',')]
+        self.DATA_KEYS=self.DATA_KEYS.split(',')
         if self.EDGE_CONV_FILTERS.find(',')>0:
             self.EDGE_CONV_FILTERS = [int(v) for v in self.EDGE_CONV_FILTERS.split(',')]
         else:

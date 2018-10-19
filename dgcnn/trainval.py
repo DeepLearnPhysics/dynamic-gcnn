@@ -31,10 +31,11 @@ class trainval(object):
                                       shape=(self._flags.MINIBATCH_SIZE,None,self._flags.NUM_CHANNEL))
                                       #shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT,self._flags.NUM_CHANNEL))
               labels = tf.placeholder(tf.int32,
-                                      shape=(self._flags.MINIBATCH_SIZE,None))
+                                      shape=(self._flags.MINIBATCH_SIZE,None,1))
                                       #shape=(self._flags.MINIBATCH_SIZE,self._flags.NUM_POINT))
               self._points_v.append(points)
               self._labels_v.append(labels)
+              labels = tf.reshape(labels,(self._flags.MINIBATCH_SIZE,-1))
               pred = dgcnn.model.build(points, self._flags)
               softmax = tf.nn.softmax(logits=pred)
               softmax_v.append(softmax)
@@ -44,10 +45,11 @@ class trainval(object):
               # If training, compute gradients
               if self._flags.TRAIN:
                 loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=pred, labels=labels)
-                if self._flags.WEIGHT_KEY:
+                if len(self._flags.DATA_KEYS)>2:
                   weight = tf.placeholder(tf.float32,
-                                          shape=(self._flags.MINIBATCH_SIZE,None))
+                                          shape=(self._flags.MINIBATCH_SIZE,None,1))
                   self._weights_v.append(weight)
+                  weight = tf.reshape(weight,(self._flags.MINIBATCH_SIZE,-1))
                   loss = tf.multiply(loss,weight)
                 loss = tf.reduce_mean(loss)
                 loss_v.append(loss)

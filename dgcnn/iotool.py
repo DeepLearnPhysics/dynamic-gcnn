@@ -37,9 +37,7 @@ class io_larcv(io_base):
     def __init__(self,flags):
         super(io_larcv,self).__init__(flags=flags)
         self._flags  = flags
-        self._data   = None
-        self._label  = None
-        self._weight = None
+        self._blob   = {}
         self._fout   = None
         self._last_entry = -1
         self._event_keys = []
@@ -52,58 +50,47 @@ class io_larcv(io_base):
         # configure the input
         from larcv import larcv
         from ROOT import TChain
-        ch_data   = TChain('sparse3d_%s_tree' % self._flags.DATA_KEY)
-        ch_label  = None
-        ch_weight = None
-        if self._flags.LABEL_KEY:
-            ch_label  = TChain('sparse3d_%s_tree' % self._flags.LABEL_KEY)
-        if self._flags.WEIGHT_KEY:
-            ch_weight = TChain('sparse3d_%s_tree' % self._flags.WEIGHT_KEY)
+        ch_blob = {}
+        br_blob = {}
+        for key in self._flags.DATA_KEYS:
+            ch_blob[key]=TChain('sparse3d_%s_tree' % key)
+            self._blob[key]=[]
         for f in self._flags.INPUT_FILE:
-            ch_data.AddFile(f)
-            if ch_label:  ch_label.AddFile(f)
-            if ch_weight: ch_weight.AddFile(f)
-        self._data   = []
-        self._label  = []
-        self._weight = []
-        br_data,br_label,br_weight=(None,None,None)
-        event_fraction = 1./ch_data.GetEntries() * 100.
-        total_point = 0.
-        for i in range(ch_data.GetEntries()):
-            ch_data.GetEntry(i)
-            if ch_label:  ch_label.GetEntry(i)
-            if ch_weight: ch_weight.GetEntry(i)
-            if br_data is None:
-                br_data  = getattr(ch_data, 'sparse3d_%s_branch' % self._flags.DATA_KEY)
-                if ch_label:  br_label  = getattr(ch_label, 'sparse3d_%s_branch' % self._flags.LABEL_KEY)
-                if ch_weight: br_weight = getattr(ch_weight,'sparse3d_%s_branch' % self._flags.WEIGHT_KEY)
-            num_point = br_data.as_vector().size()
-            if num_point < 256: continue
-            
+            for ch in ch_blob.values():
+                ch.AddFile(f)
+        ach = ch_blob.values()[0]
+        event_fraction = 1./ach.GetEntries() * 100.
+        total_data = 0.
+        for i in range(ach.GetEntries()):
+            for key,ch in ch_blob.iteritems():
+                ch.GetEntry(i)
+                if i == 0:
+                    br_blob[key] = getattr(ch, 'sparse3d_%s_branch' % key)
+            num_point = br_blob.values()[0].as_vector().size()
+            if num_point < self._flags.KVALUE: continue
+
+            # special treatment for the 1st data
+            br_data = br_blob[self._flags.DATA_KEYS[0]]
             np_data  = np.zeros(shape=(num_point,4),dtype=np.float32)
-            larcv.fill_3d_pcloud(br_data,  np_data)
-            self._data.append(np_data)
+            larcv.fill_3d_pcloud(br_data, np_data)
+            self._blob[self._flags.DATA_KEYS[0]].append(np_data)
             self._event_keys.append((br_data.run(),br_data.subrun(),br_data.event()))
             self._metas.append(larcv.Voxel3DMeta(br_data.meta()))
-            if ch_label:
-                np_label = np.zeros(shape=(num_point,1),dtype=np.float32)
-                larcv.fill_3d_pcloud(br_label, np_label)
-                np_label = np_label.reshape([num_point]) - 1.
-                self._label.append(np_label)
-            if ch_weight:
-                np_weight = np.zeros(shape=(num_point,1),dtype=np.float32)
-                larcv.fill_3d_pcloud(br_weight, np_weight)
-                np_weight = np_weight.reshape([num_point])
-                np_weight = np_weight / np_weight.sum() * len(np_weight)
-                self._weight.append(np_weight)
-            total_point += np_data.size
-            sys.stdout.write('Processed %d%% ... %d MB\r' % (int(event_fraction*i),int(total_point*4*2/1.e6)))
+            # for the rest, different treatment
+            for key in self._flags.DATA_KEYS[1:]:
+                br = br_blob[key]
+                np_data = np.zeros(shape=(num_point,1),dtype=np.float32)
+                larcv.fill_3d_pcloud(br,np_data)
+                self._blob[key].append(np_data)
+            total_data += num_point * 4 * (4 + len(self._flags.DATA_KEYS)-1)
+            sys.stdout.write('Processed %d%% ... %d MB\r' % (int(event_fraction*i),int(total_data/1.e6)))
             sys.stdout.flush()
 
         sys.stdout.write('\n')
         sys.stdout.flush()
-        self._num_channels = self._data[-1].shape[-1]
-        self._num_entries = len(self._data)
+        data = self._blob[self._flags.DATA_KEYS[0]]
+        self._num_channels = data[0].shape[-1]
+        self._num_entries = len(data)
         # Output
         if self._flags.OUTPUT_FILE:
             import tempfile
@@ -127,31 +114,28 @@ IOManager: {
             self._fout.initialize()
             
     def next(self):
-        data,label,weight=(None,None,None)
+        blob = {}
         start,end=(-1,-1)
         if self._flags.SHUFFLE:
             start = int(np.random.random() * (self.num_entries() - self.batch_size()))
             end   = start + self.batch_size()
             idx   = np.arange(start,end,1)
-            data = self._data[start:end]
-            if len(self._label)  > 0: label  = self._label[start:end]
-            if len(self._weight) > 0: weight = self._weight[start:end]
+            for key,val in self._blob.iteritems():
+                blob[key] = val[start:end]
         else:
             start = self._last_entry+1
             end   = start + self.batch_size()
             if end < self.num_entries():
                 idx = np.arange(start,end,1)
-                data = self._data[start:end]
-                if len(self._label)  > 0: label  = self._label[start:end]
-                if len(self._weight) > 0: weight = self._weight[start:end]
+                for key,val in self._blob.iteritems():
+                    blob[key] = val[start:end]
             else:
                 idx = np.concatenate([np.arange(start,self.num_entries(),1),np.arange(0,end-self.num_entries(),1)])
-                data = self._data[start:] + self._data[0:end-self.num_entries()]
-                if len(self._label)  > 0: label  = self._label[start:]  + self._label[0:end-self.num_entries()]
-                if len(self._weight) > 0: weight = self._weight[start:] + self._weight[0:end-self._num_entries()]
+                for key,val in self._blob.iteritems():
+                    blob[key] = val[start:] + val[0:end-self.num_entries()]
         self._last_entry = idx[-1]
 
-        return idx,data,label,weight
+        return idx,blob
 
     def store(self,idx,softmax):
         from larcv import larcv
@@ -164,7 +148,7 @@ IOManager: {
         meta = self._metas[idx]
         
         larcv_data = self._fout.get_data('sparse3d',self._flags.DATA_KEY)
-        data = self._data[idx]
+        data = self._blob[self._flags.DATA_KEYS[0]][idx]
         vs = larcv.as_tensor3d(data,meta,0.)
         larcv_data.set(vs,meta)
 
@@ -181,14 +165,15 @@ IOManager: {
         larcv_prediction = self._fout.get_data('sparse3d','prediction')
         vs = larcv.as_tensor3d(prediction,meta,-1.)
         larcv_prediction.set(vs,meta)
-        
-        if len(self._label) > 0:
-            label = self._label[idx]
-            label = label.astype(np.float32).reshape([len(label),1])
-            label = np.concatenate([pos,label],axis=1)
-            larcv_label = self._fout.get_data('sparse3d','label')
-            vs = larcv.as_tensor3d(label,meta,-1.)
-            larcv_label.set(vs,meta)
+
+        for key,val in self._flags.DATA_KEYS:
+            if key == self._flags.DATA_KEYS[0]: continue
+            data = val[idx]
+            data = data.astype(np.float32).reshape([len(data),1])
+            data = np.concatenate([pos,data],axis=1)
+            larcv_data = self._fout.get_data('sparse3d',key)
+            vs = larcv.as_tensor3d(data,meta,-1.)
+            larcv_data.set(vs,meta)
 
         self._fout.set_id(keys[0],keys[1],keys[2])
         self._fout.save_entry()
@@ -202,9 +187,7 @@ class io_h5(io_base):
     def __init__(self,flags):
         super(io_h5,self).__init__(flags=flags)
         self._flags  = flags
-        self._data   = None
-        self._label  = None
-        self._weight = None
+        self._blob   = {}
         self._fout   = None
         self._ohandler_data = None
         self._ohandler_label = None
@@ -215,46 +198,36 @@ class io_h5(io_base):
         self._last_entry = -1
         # Prepare input
         import h5py as h5
-        self._data   = None
-        self._label  = None
-        self._weight = None
+        self._blob   = {}
         for f in self._flags.INPUT_FILE:
             f = h5.File(f,'r')
-            if self._data is None:
-                self._data  = np.array(f[self._flags.DATA_KEY ])
-                if self._flags.LABEL_KEY : self._label  = np.array(f[self._flags.LABEL_KEY])
-                if self._flags.WEIGHT_KEY: self._weight = np.array(f[self._flags.WEIGHT_KEY])
+            if len(self._blob) == 0:
+                for key in self._flags.DATA_KEYS:
+                    self._blob[key] = np.array(f[key])
             else:
-                self._data  = np.concatenate(self._data, np.array(f[self._flags.DATA_KEY ]))
-                if self._label  : self._label  = np.concatenate(self._label, np.array(f[self._flags.LABEL_KEY ]))
-                if self._weight : self._weight = np.concatenate(self._weight,np.array(f[self._flags.WEIGHT_KEY]))
-        self._num_channels = self._data[-1].shape[-1]
-        self._num_entries = len(self._data)
+                for key in self._flags.DATA_KEYS:
+                    self._blob[key] = np.concatenate(self._blob[key],np.array(f[key]))
+        data = self._blob[self.DATA_KEYS[0]]
+        self._num_channels = data[-1].shape[-1]
+        self._num_entries = len(data)
         # Prepare output
         if self._flags.OUTPUT_FILE:
             import tables
             FILTERS = tables.Filters(complib='zlib', complevel=5)
             self._fout = tables.open_file(self._flags.OUTPUT_FILE,mode='w', filters=FILTERS)
-            data_shape = list(self._data[0].shape)
+            data_shape = list(data[0].shape)
             data_shape.insert(0,0)
             self._ohandler_data = self._fout.create_earray(self._fout.root,self._flags.DATA_KEY,tables.Float32Atom(),shape=data_shape)
             self._ohandler_softmax = self._fout.create_earray(self._fout.root,'softmax',tables.Float32Atom(),shape=data_shape)
-            if self._label:
-                data_shape = list(self._label[0].shape)
-                data_shape.insert(0,0)
-                self._ohandler_label = self._fout.create_earray(self._fout.root,self._flags.LABEL_KEY,tables.Float32Atom(),shape=data_shape)
     def store(self,idx,softmax):
         if self._fout is None:
             raise NotImplementedError
         idx=int(idx)
         if idx >= self.num_entries():
             raise ValueError
-        data = self._data[idx]
+        data = self._blob[self._flags.DATA_KEYS[0]][idx]
         self._ohandler_data.append(data[None])
         self._ohandler_softmax.append(softmax[None])
-        if self._label is not None:
-            label = self._label[idx]
-            self._ohandler_label.append(label[None])
 
     def next(self):
         idx = None
@@ -270,11 +243,10 @@ class io_h5(io_base):
             else:
                 idx = np.concatenate([np.arange(start,self.num_entries()),np.arange(0,end-self.num_entries())])
         self._last_entry = idx[-1]
-        data = self._data[idx, ...]
-        label,weight=(None,None)
-        if self._label  : label  = self._label[idx, ...]
-        if self._weight : weight = self._weight[idx, ...]
-        return idx, data, label, weight
+        blob = {}
+        for key,val in self._blob.iteritems():
+            blob[key] = val[idx, ...]
+        return idx, blob
 
     def finalize(self):
         if self._fout:

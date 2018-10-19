@@ -19,13 +19,13 @@ def iotest(flags):
   io.initialize()
   num_entries = io.num_entries()
   ctr = 0
+  data_key = flags.DATA_KEYS[0]
   while ctr < num_entries:
-    idx,data,label,weight=io.next()
-    msg = str(ctr) + '/' + str(num_entries) + ' ... '  + str(idx) + ' ' + str(data[0].shape)
-    if label:
-      msg += str(label[0].shape)
-    if weight:
-      msg += str(weight[0].shape)
+    idx,blob=io.next()
+    msg = str(ctr) + '/' + str(num_entries) + ' ... '  + str(idx) + ' ' + str(blob[data_key][0].shape)
+    for key in flags.DATA_KEYS:
+      if key == data_key: continue
+      msg += str(blob[key][0].shape)
     print(msg)
     ctr += len(data)
   io.finalize()
@@ -63,7 +63,7 @@ def prepare(flags):
   # IO configuration
   handlers.data_io = dgcnn.io_factory(flags)
   handlers.data_io.initialize()
-  _,train_data,_,_ = handlers.data_io.next()
+  _,blob = handlers.data_io.next()
 
   # Trainer configuration
   flags.NUM_CHANNEL = handlers.data_io.num_channels()
@@ -109,6 +109,11 @@ def train_loop(flags,handlers):
   handlers.csv_logger.write(',titer,ttrain,tio,tsave,tsummary')
   handlers.csv_logger.write(',tsumiter,tsumtrain,tsumio,tsumsave,tsumsummary')
   handlers.csv_logger.write(',loss,accuracy\n')
+
+  data_key, label_key = flags.DATA_KEYS[0:2]
+  weight_key = None
+  if len(flags.DATA_KEYS) > 2:
+    weight_key = flags.DATA_KEYS[2]
   
   tsum       = 0.
   tsum_train = 0.
@@ -125,10 +130,15 @@ def train_loop(flags,handlers):
     checkpt_step = flags.CHECKPOINT_STEP and flags.WEIGHT_PREFIX and ((handlers.iteration+1) % flags.CHECKPOINT_STEP == 0)
 
     tstart = time.time()
-    idx,data,label,weight = handlers.data_io.next()
+    idx,blob = handlers.data_io.next()
     tspent_io = time.time() - tstart
     tsum_io += tspent_io
-    
+
+    data  = blob[data_key]
+    label = blob[label_key]
+    weight = None
+    if weight_key is not None:
+      weight = blob[weight_key]
     current_idx = 0
     loss_v = []
     accuracy_v  = []
@@ -214,6 +224,12 @@ def inference_loop(flags,handlers):
   handlers.csv_logger.write(',titer,tinference,tio')
   handlers.csv_logger.write(',tsumiter,tsuminference,tsumio')
   handlers.csv_logger.write(',loss,accuracy\n')
+  data_key = flags.DATA_KEYS[0]
+  label_key,weight_key = (None,None)
+  if len(flags.DATA_KEYS) > 1:
+    label_key = flags.DATA_KEYS[1]
+  if len(flags.DATA_KEYS) > 2:
+    weight_key = flags.DATA_KEYS[2]
   tsum           = 0.
   tsum_io        = 0.
   tsum_inference = 0.
@@ -225,9 +241,16 @@ def inference_loop(flags,handlers):
     report_step  = flags.REPORT_STEP and ((handlers.iteration+1) % flags.REPORT_STEP == 0)
 
     tstart = time.time()
-    idx,data,label,weight = handlers.data_io.next()
+    idx,blob = handlers.data_io.next()
     tspent_io = time.time() - tstart
     tsum_io += tspent_io
+
+    data  = blob[data_key]
+    label,weight = (None,None)
+    if label_key is not None:
+      label = blob[label_key]
+    if weight_key is not None:
+      weight = blob[weight_key]
     
     current_idx = 0
     softmax_vv = []
