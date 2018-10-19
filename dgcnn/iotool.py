@@ -79,19 +79,23 @@ class io_larcv(io_base):
                 if ch_weight: br_weight = getattr(ch_weight,'sparse3d_%s_branch' % self._flags.WEIGHT_KEY)
             num_point = br_data.as_vector().size()
             if num_point < 256: continue
-            
+            print(br_data)
             np_data  = np.zeros(shape=(num_point,4),dtype=np.float32)
+            print(np_data.shape)
             larcv.fill_3d_pcloud(br_data,  np_data)
+            print(np_data.shape)
             self._data.append(np_data)
             self._event_keys.append((br_data.run(),br_data.subrun(),br_data.event()))
             self._metas.append(larcv.Voxel3DMeta(br_data.meta()))
             if ch_label:
                 np_label = np.zeros(shape=(num_point,1),dtype=np.float32)
+                print(np_label.shape)
                 larcv.fill_3d_pcloud(br_label, np_label)
                 np_label = np_label.reshape([num_point]) - 1.
                 self._label.append(np_label)
             if ch_weight:
                 np_weight = np.zeros(shape=(num_point,1),dtype=np.float32)
+                print(np_weight.shape)
                 larcv.fill_3d_pcloud(br_weight, np_weight)
                 np_weight = np_weight.reshape([num_point])
                 np_weight = np_weight / np_weight.sum() * len(np_weight)
