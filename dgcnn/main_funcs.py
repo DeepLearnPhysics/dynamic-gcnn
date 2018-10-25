@@ -108,13 +108,9 @@ def train_loop(flags,handlers):
   handlers.csv_logger.write('iter,epoch')
   handlers.csv_logger.write(',titer,ttrain,tio,tsave,tsummary')
   handlers.csv_logger.write(',tsumiter,tsumtrain,tsumio,tsumsave,tsumsummary')
-  handlers.csv_logger.write(',loss,accuracy\n')
+  handlers.csv_logger.write(',alpha,loss0,loss1,loss2,loss\n')
 
-  data_key, label_key = flags.DATA_KEYS[0:2]
-  weight_key = None
-  if len(flags.DATA_KEYS) > 2:
-    weight_key = flags.DATA_KEYS[2]
-  
+  data_key, grp_key, pdg_key = flags.DATA_KEYS[0:3]
   tsum       = 0.
   tsum_train = 0.
   tsum_io    = 0.
@@ -122,6 +118,7 @@ def train_loop(flags,handlers):
   tsum_summary = 0.
   while handlers.iteration < flags.ITERATION:
 
+    epoch = handlers.iteration * float(flags.BATCH_SIZE) / handlers.data_io.num_entries()
     tstamp_iteration = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
     tstart_iteration = time.time()
     
@@ -134,42 +131,46 @@ def train_loop(flags,handlers):
     tspent_io = time.time() - tstart
     tsum_io += tspent_io
 
-    data  = blob[data_key]
-    label = blob[label_key]
-    weight = None
-    if weight_key is not None:
-      weight = blob[weight_key]
+    data = blob[data_key]
+    grp  = blob[grp_key]
+    pdg  = blob[pdg_key]
     current_idx = 0
-    loss_v = []
-    accuracy_v  = []
+    losses = {'loss0':[],'loss1':[],'loss2':[],'total':[]}
     handlers.trainer.zero_gradients(handlers.sess)
     # Accummulate gradients
     tspent_train = 0.
     tspent_summary = 0.
     while current_idx < flags.BATCH_SIZE:
-      tstart   = time.time()
-      data_v   = []
-      label_v  = []
-      weight_v = None
-      if weight is not None: weight_v = []
+      tstart = time.time()
+      data_v = []
+      grp_v  = []
+      pdg_v  = []
       for _ in flags.GPUS:
         start = current_idx
         end   = current_idx + flags.MINIBATCH_SIZE
         data_v.append(data[start:end])
-        label_v.append(label[start:end])
-        if weight is not None:
-          weight_v.append(weight[start:end])
+        grp_v.append(grp[start:end])
+        pdg_v.append(pdg[start:end])
         current_idx = end
       # compute gradients
       make_summary = summary_step and (current_idx == flags.BATCH_SIZE)
-      res = handlers.trainer.accum_gradient(handlers.sess,data_v,label_v,weight_v,summary=make_summary)
-      accuracy_v.append(res[1])
-      loss_v.append(res[2])
+      alpha = min(flags.ALPHA_LIMIT, 1 + (float(epoch) / flags.ALPHA_DECAY) * (flags.ALPHA_LIMIT-1.) + 1.)
+      res = handlers.trainer.accum_gradient(handlers.sess,data_v,grp_v,pdg_v,alpha,summary=make_summary)
+      losses['loss0'].append(res[1])
+      losses['loss1'].append(res[2])
+      losses['loss2'].append(res[3])
+      losses['total'].append(res[4])
       tspent_train = tspent_train + (time.time() - tstart)
+      #print(idx[current_idx-1])
+      #print(data_v[-1][-1].shape)
+      #print(len(res))
+      #print(res[-4:-1])
+      #print(res[-1])
+      #print(res[-1].min(),res[-1].max(),np.unique(res[-1],return_counts=True))
       # log summary
       if make_summary:
         tstart = time.time()
-        handlers.train_logger.add_summary(res[3],handlers.iteration)
+        handlers.train_logger.add_summary(res[5],handlers.iteration)
         tspent_summary = time.time() - tstart
     # Apply gradients
     tstart = time.time()
@@ -179,10 +180,11 @@ def train_loop(flags,handlers):
     tsum_train += tspent_train
     tsum_summary += tspent_summary
     
-    # Compute loss/accuracy
-    loss = np.mean(loss_v)
-    accuracy = np.mean(accuracy_v)
-    epoch = handlers.iteration * float(flags.BATCH_SIZE) / handlers.data_io.num_entries()
+    # Compute loss
+    loss0 = np.mean(losses['loss0'])
+    loss1 = np.mean(losses['loss1'])
+    loss2 = np.mean(losses['loss2'])
+    losstotal = np.mean(losses['total'])
     # Save snapshot
     tspent_save = 0.
     if checkpt_step:
@@ -197,17 +199,19 @@ def train_loop(flags,handlers):
       csv_data  = '%d,%g,' % (handlers.iteration,epoch)
       csv_data += '%g,%g,%g,%g,%g,' % (tspent_iteration,tspent_train,tspent_io,tspent_save,tspent_summary)
       csv_data += '%g,%g,%g,%g,%g,' % (tsum,tsum_train,tsum_io,tsum_save,tsum_summary)
-      csv_data += '%g,%g\n' % (loss,accuracy)
+      csv_data += '%g,%g,%g,%g,%g\n'   % (alpha,loss0,loss1,loss2,losstotal)
       handlers.csv_logger.write(csv_data)
     # Report (stdout)
     if report_step:
-      loss = round_decimals(loss,4)
-      accuracy = round_decimals(accuracy,4)
+      loss0 = round_decimals(loss0,4)
+      loss1 = round_decimals(loss1,4)
+      loss2 = round_decimals(loss2,4)
+      losstotal = round_decimals(losstotal,4)
       tfrac = round_decimals(tspent_train/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
-      mem = handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())
-      msg = 'Iteration %d (epoch %g) @ %s ... train time fraction %g%% max mem. %g ... loss %g accuracy %g'
-      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,loss,accuracy)
+      mem = round_decimals(handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())/1.e9,3)
+      msg = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g ... loss0 %g loss1 %g loss2 %g loss %g'
+      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha,loss0,loss1,loss2,losstotal)
       print(msg)
       sys.stdout.flush()
       if handlers.csv_logger: handlers.csv_logger.flush()
@@ -222,8 +226,7 @@ def train_loop(flags,handlers):
 def inference_loop(flags,handlers):
   handlers.csv_logger.write('iter,epoch')
   handlers.csv_logger.write(',titer,tinference,tio')
-  handlers.csv_logger.write(',tsumiter,tsuminference,tsumio')
-  handlers.csv_logger.write(',loss,accuracy\n')
+  handlers.csv_logger.write(',tsumiter,tsuminference,tsumio\n')
   data_key = flags.DATA_KEYS[0]
   label_key,weight_key = (None,None)
   if len(flags.DATA_KEYS) > 1:
@@ -253,52 +256,40 @@ def inference_loop(flags,handlers):
       weight = blob[weight_key]
     
     current_idx = 0
-    softmax_vv = []
-    loss_v = []
-    accuracy_v  = []
     
     # Run inference
     tspent_inference = 0.
-    tstart = time.time()
+    tstart  = time.time()
+    pred_vv = []
     while current_idx < flags.BATCH_SIZE:
-      data_v   = []
-      label_v  = None
-      weight_v = None
-      if label  is not None: label_v  = []
-      if weight is not None: weight_v = []
+      data_v = []
+      grp_v  = []
+      pdg_v  = []
       for _ in flags.GPUS:
         start = current_idx
         end   = current_idx + flags.MINIBATCH_SIZE
         data_v.append(data[start:end])
-        if label  is not None:
-          label_v.append(label[start:end])
-        if weight is not None:
-          weight_v.append(weight[start:end])
+        grp_v.append(grp[start:end])
+        pdg_v.append(pdg[start:end])
         current_idx = end
       # compute gradients
-      res = handlers.trainer.inference(handlers.sess,data_v,label_v,weight_v)
-      if flags.LABEL_KEY:
-        softmax_vv = softmax_vv + res[0:-2]
-        accuracy_v.append(res[-2])
-        loss_v.append(res[-1])
-      else:
-        softmax_vv = softmax_vv + res
+      pred_v = handlers.trainer.inference(handlers.sess,data_v,grp_v,pdg_v)
+      pred_vv.append(pred_v)
     tspent_inference = tspent_inference + (time.time() - tstart)
     tsum_inference  += tspent_inference
 
     # Store output if requested
     if flags.OUTPUT_FILE:
       idx_ctr = 0
-      for softmax_v in softmax_vv:
-        for softmax in softmax_v:
-          handlers.data_io.store(idx[idx_ctr],softmax)
+      for pred_v in pred_vv:
+        for pred in pred_v:
+          handlers.data_io.store(idx[idx_ctr],pred)
           idx_ctr += 1
+
+    # Store output if requested
+    if flags.OUTPUT_FILE:
+      raise NotImplementedError
     
-    # Compute loss/accuracy
-    loss,accuracy=[-1,-1]
-    if flags.LABEL_KEY:
-      loss = np.mean(loss_v)
-      accuracy = np.mean(accuracy_v)
     epoch = handlers.iteration * float(flags.BATCH_SIZE) / handlers.data_io.num_entries()
     # Report (logger)
     if handlers.csv_logger:
@@ -306,18 +297,15 @@ def inference_loop(flags,handlers):
       tsum += tspent_iteration
       csv_data  = '%d,%g,' % (handlers.iteration,epoch)
       csv_data += '%g,%g,%g,' % (tspent_iteration,tspent_inference,tspent_io)
-      csv_data += '%g,%g,%g,' % (tsum,tsum_inference,tsum_io)
-      csv_data += '%g,%g\n' % (loss,accuracy)
+      csv_data += '%g,%g,%g\n' % (tsum,tsum_inference,tsum_io)
       handlers.csv_logger.write(csv_data)
     # Report (stdout)
     if report_step:
-      loss = round_decimals(loss,4)
-      accuracy = round_decimals(accuracy,4)
       tfrac = round_decimals(tspent_inference/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
       mem = handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())
-      msg = 'Iteration %d (epoch %g) @ %s ... inference time fraction %g%% max mem. %g ... loss %g accuracy %g'
-      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,loss,accuracy)
+      msg = 'Iteration %d (epoch %g) @ %s ... inference time fraction %g%% max mem. %g'
+      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem)
       print(msg)
       sys.stdout.flush()
       if handlers.csv_logger: handlers.csv_logger.flush()

@@ -91,17 +91,9 @@ def build(point_cloud, flags):
     net = tf.nn.dropout(net, 0.7, None)
     if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
-  net = slim.conv2d(inputs      = net,
-                    num_outputs = num_class,
-                    kernel_size = 1,
-                    stride      = 1,
-                    trainable   = True,
-                    padding     = 'VALID',
-                    normalizer_fn = slim.batch_norm,
-                    scope       = 'Final')
+  net = tf.squeeze(net,axis=-2)
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
-  
-  net = tf.squeeze(net, axis=-2)
+  net = dgcnn.ops.dist_nn(net)
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   return net
 

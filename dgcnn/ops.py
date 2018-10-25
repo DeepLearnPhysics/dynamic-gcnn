@@ -5,7 +5,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as L
 import tensorflow.contrib.slim as slim
-def k_nn(points, k):
+
+def dist_nn(points):
   # The shape of points (B, N, C)
   # Use linear algebra to find all pairwise distance in parallel
   M = points
@@ -14,6 +15,12 @@ def k_nn(points, k):
   squared    = tf.reduce_sum(tf.square(M), axis=-1, keepdims=True)
   squared_tranpose = tf.transpose(squared, perm=[0, 2, 1])
   nn_dist = squared + squared_tranpose - 2 * inner_prod
+  return nn_dist
+  
+def k_nn(points, k):
+  # The shape of points (B, N, C)
+  # Use linear algebra to find all pairwise distance in parallel
+  nn_dist = dist_nn(points)
   # Next pick the top k shortest ones
   _, idx = tf.nn.top_k(-nn_dist,k=k)
   return idx

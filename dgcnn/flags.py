@@ -15,6 +15,10 @@ class DGCNN_FLAGS:
     EDGE_CONV_FILTERS = 64
     FC_LAYERS  = 2
     FC_FILTERS = '512,256'
+    K1         = 10.
+    K2         = 80.
+    ALPHA_LIMIT = 10.
+    ALPHA_DECAY = 40.
     
     # flags for train/inference
     SEED           = -1
@@ -41,7 +45,7 @@ class DGCNN_FLAGS:
     MODEL_PATH = ''
     DATA_KEYS  = 'data'
     SHUFFLE    = 1
-    
+    LIMIT_NUM_SAMPLE = -1
     def __init__(self):
         self._build_parsers()
 
@@ -63,6 +67,14 @@ class DGCNN_FLAGS:
                             help='Number of fully-connected layers [default: %s]' % self.FC_LAYERS)
         parser.add_argument('-fcf','--fc_filters',type=str, default=str(self.FC_FILTERS),
                             help='Number of filters in fully-connected layers [default: %s]' % self.FC_FILTERS)
+        parser.add_argument('-k1',type=float,default=self.K1,
+                            help='Loss1 (same sem, diff group) upper limit [default: %s]' % self.K1)
+        parser.add_argument('-k2',type=float,default=self.K2,
+                            help='Loss2 (diff sem, diff group) upper limit [default: %s]' % self.K2)
+        parser.add_argument('-al','--alpha_limit',type=float,default=self.ALPHA_LIMIT,
+                            help='Loss1 multiplicative factor upper limit [default: %s]' % self.ALPHA_LIMIT)
+        parser.add_argument('-ad','--alpha_decay',type=float,default=self.ALPHA_DECAY,
+                            help='Period in epoch for alpha to reach the upper limit [default: %s]' % self.ALPHA_DECAY)
         parser.add_argument('-nc','--num_class', type=int, default=self.NUM_CLASS,
                             help='Number of classes [default: %s]' % self.NUM_CLASS)
         parser.add_argument('-np','--num_point', type=int, default=self.NUM_POINT,
@@ -87,6 +99,8 @@ class DGCNN_FLAGS:
                             help='output file name [default: %s]' % self.OUTPUT_FILE)
         parser.add_argument('-dkeys','--data_keys',type=str,default=self.DATA_KEYS,
                             help='A keyword to fetch data from file [default: %s]' % self.DATA_KEYS)
+        parser.add_argument('-lns','--limit_num_sample',type=int,default=self.LIMIT_NUM_SAMPLE,
+                            help='Limit number of samples to read from input file [default: %s]' % self.LIMIT_NUM_SAMPLE)
         return parser
         
     def _build_parsers(self):

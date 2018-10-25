@@ -3,6 +3,38 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import sys
+
+def np_dist(points):
+    M = points
+    T = points.transpose()
+    
+    A = (M*M).sum(axis=1, keepdims=True)
+    B = A.transpose()
+    C = np.matmul(M,T)
+    
+    nn_dist = A + B - 2 * C
+    return nn_dist
+
+def get_sim_matrix(grp,pdg):
+    K1 = 1.
+    K2 = 2.
+    grp_dist = np_dist(grp)
+    grp_idx_negative = np.where(grp_dist>0.)
+    grp_idx_positive = np.where(grp_dist<0.5)
+    grp_dist[grp_idx_positive] =  1.
+    grp_dist[grp_idx_negative] = -10.
+    
+    pdg_dist = np_dist(pdg)
+    pdg_idx_K1 = np.where(pdg_dist<0.5)
+    pdg_idx_K2 = np.where(pdg_dist>0)
+    pdg_dist[pdg_idx_K1] = K1 * 10.
+    pdg_dist[pdg_idx_K2] = K2
+    pdg_dist[grp_idx_positive] = 0.
+
+    grp_dist[pdg_idx_K2] = -1.
+
+    return grp_dist,pdg_dist
+    
 class io_base(object):
 
     def __init__(self,flags):
@@ -62,6 +94,8 @@ class io_larcv(io_base):
         event_fraction = 1./ach.GetEntries() * 100.
         total_data = 0.
         for i in range(ach.GetEntries()):
+            if self._flags.LIMIT_NUM_SAMPLE > 0 and i==self._flags.LIMIT_NUM_SAMPLE:
+                break
             for key,ch in ch_blob.iteritems():
                 ch.GetEntry(i)
                 if i == 0:
@@ -69,7 +103,7 @@ class io_larcv(io_base):
             num_point = br_blob.values()[0].as_vector().size()
             if num_point < self._flags.KVALUE: continue
 
-            # special treatment for the 1st data
+            # special treatment for the data
             br_data = br_blob[self._flags.DATA_KEYS[0]]
             np_data  = np.zeros(shape=(num_point,4),dtype=np.float32)
             larcv.fill_3d_pcloud(br_data, np_data)
@@ -82,6 +116,11 @@ class io_larcv(io_base):
                 np_data = np.zeros(shape=(num_point,1),dtype=np.float32)
                 larcv.fill_3d_pcloud(br,np_data)
                 self._blob[key].append(np_data)
+            # Handle similarity matrix
+            #grp_key,pdg_key = self._flags.DATA_KEYS[1:3]
+            #grp_mat,pdg_mat = get_sim_matrix(self._blob[grp_key][-1],self._blob[pdg_key][-1])
+            #self._blob[grp_key][-1] = grp_mat.reshape([-1])
+            #self._blob[pdg_key][-1] = pdg_mat.reshape([-1])
             total_data += num_point * 4 * (4 + len(self._flags.DATA_KEYS)-1)
             sys.stdout.write('Processed %d%% ... %d MB\r' % (int(event_fraction*i),int(total_data/1.e6)))
             sys.stdout.flush()
