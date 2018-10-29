@@ -6,6 +6,38 @@ import numpy as np
 import dgcnn
 import tensorflow as tf
 
+def DBScan(dist_v,threshold):
+  res = []
+  for dist in dist_v:
+    np.fill_diagonal(dist,threshold+1)
+    cands   = np.where(np.min(dist,axis=0) < threshold)
+    grp     = np.zeros(shape=[dist.shape[0]],dtype=np.float32)
+    grp[:]  = -1
+    latest_grp_id = 0
+    # loop over candidates and group coordinates
+    friends_v = [np.where(dist[c] < threshold) for c in cands[0]]
+    print('Found',len(cands[0]),'candidates...')
+    for i,cand in enumerate(cands[0]):
+      if grp[cand]>=0: continue
+      # Is any of friend in an existing group? Then use the closest one
+      friends = friends_v[i][0]
+      grouped_friends = [friend for friend in friends if grp[friend]>=0]
+      if len(grouped_friends)>0:
+        best_friend = np.argmin(dist[cand][grouped_friends])
+        best_friend = grouped_friends[best_friend]
+        grp[cand] = grp[best_friend]
+        #print('found grouped friends:',grouped_friends)
+        print('setting from best friend',cand,'(dist',dist[cand][best_friend],') grp',grp[cand])
+      else:
+        grp[friends] = latest_grp_id
+        grp[cand] = latest_grp_id
+        print('setting',cand,latest_grp_id)
+        latest_grp_id +=1
+        #print('setting friends',friends,latest_grp_id)
+
+    res.append(grp)
+  return res
+
 def round_decimals(val,digits):
   factor = float(np.power(10,digits))
   return int(val * factor+0.5) / factor
@@ -226,13 +258,14 @@ def train_loop(flags,handlers):
 def inference_loop(flags,handlers):
   handlers.csv_logger.write('iter,epoch')
   handlers.csv_logger.write(',titer,tinference,tio')
-  handlers.csv_logger.write(',tsumiter,tsuminference,tsumio\n')
+  handlers.csv_logger.write(',tsumiter,tsuminference,tsumio')
+  handlers.csv_logger.write(',alpha,loss0,loss1,loss2,loss\n')
   data_key = flags.DATA_KEYS[0]
-  label_key,weight_key = (None,None)
-  if len(flags.DATA_KEYS) > 1:
-    label_key = flags.DATA_KEYS[1]
-  if len(flags.DATA_KEYS) > 2:
-    weight_key = flags.DATA_KEYS[2]
+  grp_key,pdg_key=(None,None)
+  if len(flags.DATA_KEYS)>1:
+    grp_key = flags.DATA_KEYS[1]
+  if len(flags.DATA_KEYS)>2:
+    pdg_key = flags.DATA_KEYS[2]
   tsum           = 0.
   tsum_io        = 0.
   tsum_inference = 0.
@@ -248,13 +281,11 @@ def inference_loop(flags,handlers):
     tspent_io = time.time() - tstart
     tsum_io += tspent_io
 
-    data  = blob[data_key]
-    label,weight = (None,None)
-    if label_key is not None:
-      label = blob[label_key]
-    if weight_key is not None:
-      weight = blob[weight_key]
-    
+    data = blob[data_key]
+    grp,pdg=(None,None)
+    if grp_key is not None: grp = blob[grp_key]
+    if pdg_key is not None: pdg = blob[pdg_key]
+    losses = {'loss0':[],'loss1':[],'loss2':[],'total':[]}
     current_idx = 0
     
     # Run inference
@@ -263,33 +294,42 @@ def inference_loop(flags,handlers):
     pred_vv = []
     while current_idx < flags.BATCH_SIZE:
       data_v = []
-      grp_v  = []
-      pdg_v  = []
+      grp_v,pdg_v=(None,None)
+      if grp_key is not None:
+        grp_v,pdg_v=[],[]
       for _ in flags.GPUS:
         start = current_idx
         end   = current_idx + flags.MINIBATCH_SIZE
         data_v.append(data[start:end])
-        grp_v.append(grp[start:end])
-        pdg_v.append(pdg[start:end])
+        if grp_v is not None: grp_v.append(grp[start:end])
+        if pdg_v is not None: pdg_v.append(pdg[start:end])
         current_idx = end
       # compute gradients
-      pred_v = handlers.trainer.inference(handlers.sess,data_v,grp_v,pdg_v)
-      pred_vv.append(pred_v)
+      alpha = flags.ALPHA_LIMIT
+      res = handlers.trainer.inference(handlers.sess,data_v,grp_v,pdg_v,alpha)
+      pred_vv.append(res[0:len(flags.GPUS)])
+      losses['loss0'].append(res[len(flags.GPUS)])
+      losses['loss1'].append(res[len(flags.GPUS)+1])
+      losses['loss2'].append(res[len(flags.GPUS)+2])
+      losses['total'].append(res[len(flags.GPUS)+3])
     tspent_inference = tspent_inference + (time.time() - tstart)
     tsum_inference  += tspent_inference
+
+    # Compute loss
+    loss0 = np.mean(losses['loss0'])
+    loss1 = np.mean(losses['loss1'])
+    loss2 = np.mean(losses['loss2'])
+    losstotal = np.mean(losses['total'])
 
     # Store output if requested
     if flags.OUTPUT_FILE:
       idx_ctr = 0
       for pred_v in pred_vv:
         for pred in pred_v:
-          handlers.data_io.store(idx[idx_ctr],pred)
+          grp = DBScan(pred,5)
+          handlers.data_io.store(idx[idx_ctr],grp[0].reshape([-1,1]))
           idx_ctr += 1
 
-    # Store output if requested
-    if flags.OUTPUT_FILE:
-      raise NotImplementedError
-    
     epoch = handlers.iteration * float(flags.BATCH_SIZE) / handlers.data_io.num_entries()
     # Report (logger)
     if handlers.csv_logger:
@@ -297,15 +337,20 @@ def inference_loop(flags,handlers):
       tsum += tspent_iteration
       csv_data  = '%d,%g,' % (handlers.iteration,epoch)
       csv_data += '%g,%g,%g,' % (tspent_iteration,tspent_inference,tspent_io)
-      csv_data += '%g,%g,%g\n' % (tsum,tsum_inference,tsum_io)
+      csv_data += '%g,%g,%g,' % (tsum,tsum_inference,tsum_io)
+      csv_data += '%g,%g,%g,%g,%g\n'   % (alpha,loss0,loss1,loss2,losstotal)
       handlers.csv_logger.write(csv_data)
     # Report (stdout)
     if report_step:
+      loss0 = round_decimals(loss0,4)
+      loss1 = round_decimals(loss1,4)
+      loss2 = round_decimals(loss2,4)
+      losstotal = round_decimals(losstotal,4)
       tfrac = round_decimals(tspent_inference/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
-      mem = handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())
-      msg = 'Iteration %d (epoch %g) @ %s ... inference time fraction %g%% max mem. %g'
-      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem)
+      mem = round_decimals(handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())/1.e9,3)
+      msg = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g ... loss0 %g loss1 %g loss2 %g loss %g'
+      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha,loss0,loss1,loss2,losstotal)
       print(msg)
       sys.stdout.flush()
       if handlers.csv_logger: handlers.csv_logger.flush()

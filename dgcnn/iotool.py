@@ -55,7 +55,7 @@ class io_base(object):
     def initialize(self):
         raise NotImplementedError
 
-    def store(self,idx,softmax):
+    def store(self,idx,group):
         raise NotImplementedError
 
     def next(self):
@@ -176,7 +176,7 @@ IOManager: {
 
         return idx,blob
 
-    def store(self,idx,softmax):
+    def store(self,idx,group):
         from larcv import larcv
         if self._fout is None:
             raise NotImplementedError
@@ -186,33 +186,17 @@ IOManager: {
         keys = self._event_keys[idx]
         meta = self._metas[idx]
         
-        larcv_data = self._fout.get_data('sparse3d',self._flags.DATA_KEY)
+        larcv_data = self._fout.get_data('sparse3d',self._flags.DATA_KEYS[0])
         data = self._blob[self._flags.DATA_KEYS[0]][idx]
         vs = larcv.as_tensor3d(data,meta,0.)
         larcv_data.set(vs,meta)
 
         pos = data[:,0:3]
-        score = np.max(softmax,axis=1).reshape([len(softmax),1])
-        score = np.concatenate([pos,score],axis=1)
-        prediction = np.argmax(softmax,axis=1).astype(np.float32).reshape([len(softmax),1])
-        prediction = np.concatenate([pos,prediction],axis=1)
+        group = np.concatenate([pos,group],axis=1)
         
-        larcv_softmax = self._fout.get_data('sparse3d','softmax')
-        vs = larcv.as_tensor3d(score,meta,-1.)
-        larcv_softmax.set(vs,meta)
-
-        larcv_prediction = self._fout.get_data('sparse3d','prediction')
-        vs = larcv.as_tensor3d(prediction,meta,-1.)
-        larcv_prediction.set(vs,meta)
-
-        for key,val in self._flags.DATA_KEYS:
-            if key == self._flags.DATA_KEYS[0]: continue
-            data = val[idx]
-            data = data.astype(np.float32).reshape([len(data),1])
-            data = np.concatenate([pos,data],axis=1)
-            larcv_data = self._fout.get_data('sparse3d',key)
-            vs = larcv.as_tensor3d(data,meta,-1.)
-            larcv_data.set(vs,meta)
+        larcv_group = self._fout.get_data('sparse3d','prediction')
+        vs = larcv.as_tensor3d(group,meta,-1.)
+        larcv_group.set(vs,meta)
 
         self._fout.set_id(keys[0],keys[1],keys[2])
         self._fout.save_entry()
@@ -230,7 +214,6 @@ class io_h5(io_base):
         self._fout   = None
         self._ohandler_data = None
         self._ohandler_label = None
-        self._ohandler_softmax = None
         self._has_label = False
 
     def initialize(self):
@@ -257,8 +240,7 @@ class io_h5(io_base):
             data_shape = list(data[0].shape)
             data_shape.insert(0,0)
             self._ohandler_data = self._fout.create_earray(self._fout.root,self._flags.DATA_KEY,tables.Float32Atom(),shape=data_shape)
-            self._ohandler_softmax = self._fout.create_earray(self._fout.root,'softmax',tables.Float32Atom(),shape=data_shape)
-    def store(self,idx,softmax):
+    def store(self,idx,group):
         if self._fout is None:
             raise NotImplementedError
         idx=int(idx)
@@ -266,7 +248,6 @@ class io_h5(io_base):
             raise ValueError
         data = self._blob[self._flags.DATA_KEYS[0]][idx]
         self._ohandler_data.append(data[None])
-        self._ohandler_softmax.append(softmax[None])
 
     def next(self):
         idx = None
