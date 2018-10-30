@@ -90,10 +90,34 @@ def build(point_cloud, flags):
   if is_training:
     net = tf.nn.dropout(net, 0.7, None)
     if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
-
   net = tf.squeeze(net,axis=-2)
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
-  net = dgcnn.ops.dist_nn(net)
-  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
-  return net
+
+  # Clustering
+  dist = dgcnn.ops.dist_nn(net)
+  if debug: print('Shape {:s} ... Name {:s}'.format(dist.shape,dist.name))
+
+  # Confidence
+  conf = net
+  with tf.variable_scope('ScoreEdgeConv'):
+    num_conf_filters = num_fc_filters
+    if not type(num_conf_filters) == type(int()):
+      num_conf_filters = num_conf_filters[-1]
+    conf = dgcnn.ops.edge_conv(point_cloud=conf,
+                               k=k,
+                               num_filters=num_conf_filters,
+                               trainable=is_training,
+                               debug=debug)
+    conf = slim.conv2d(inputs      = conf[-1],
+                       num_outputs = 1,
+                       kernel_size = 1,
+                       stride      = 1,
+                       trainable   = True,
+                       padding     = 'VALID',
+                       normalizer_fn = slim.batch_norm,
+                       scope       = 'ScoreFinal')
+    conf = tf.squeeze(conf,axis=[2,3])
+  if debug: print('Shape {:s} ... Name {:s}'.format(conf.shape,conf.name))
+  
+  return dist,conf
 

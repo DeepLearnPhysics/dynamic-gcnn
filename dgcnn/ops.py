@@ -67,7 +67,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, activation=tf.nn.relu, deb
   if debug: print('Shape {:s} ... Name {:s}'.format(net_mean.shape,net_mean.name))
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net = slim.conv2d(inputs      = net,
-                    num_outputs = 64,
+                    num_outputs = num_filters,
                     kernel_size = 1,
                     stride      = 1,
                     trainable   = trainable,
@@ -79,7 +79,7 @@ def edge_conv(point_cloud, k, num_filters, trainable, activation=tf.nn.relu, deb
   
   return [net_max, net_mean, net]
 
-def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False):
+def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False, scope_prefix=''):
   
   repeat = int(repeat)
   if not type(k) == type(list()):
@@ -96,7 +96,7 @@ def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False
   net = point_cloud
   tensors = []
   for i in range(repeat):
-    scope = 'EdgeConv%d' % i
+    scope = scope_prefix + 'EdgeConv%d' % i
     with tf.variable_scope(scope):
       tensors += edge_conv(net, k[i], num_filters[i], trainable, debug=debug)
       net = tensors[-1]
@@ -104,7 +104,7 @@ def repeat_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False
 
   return tensors
 
-def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False):
+def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, debug=False, scope_prefix=''):
   
   repeat = int(repeat)
   if not type(k) == type(list()):
@@ -122,7 +122,7 @@ def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, de
   tensors  = []
   shortcut = None
   for i in range(repeat):
-    scope = 'EdgeConv%d' % i
+    scope = scope_prefix + 'EdgeConv%d' % i
     with tf.variable_scope(scope):
       if shortcut is None: 
         tensors += edge_conv(net, k[i], num_filters[i], trainable, debug=debug)

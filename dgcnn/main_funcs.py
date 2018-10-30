@@ -131,16 +131,11 @@ def prepare(flags):
     logname = '%s/train_log-%07d.csv' % (flags.LOG_DIR,loaded_iteration)
     if not flags.TRAIN:
       logname = '%s/inference_log-%07d.csv' % (flags.LOG_DIR,loaded_iteration)
-    handlers.csv_logger = open(logname,'w')
+    handlers.csv_logger = dgcnn.CSVData(logname)
     
   return handlers
     
 def train_loop(flags,handlers):
-
-  handlers.csv_logger.write('iter,epoch')
-  handlers.csv_logger.write(',titer,ttrain,tio,tsave,tsummary')
-  handlers.csv_logger.write(',tsumiter,tsumtrain,tsumio,tsumsave,tsumsummary')
-  handlers.csv_logger.write(',alpha,loss0,loss1,loss2,loss\n')
 
   data_key, grp_key, pdg_key = flags.DATA_KEYS[0:3]
   tsum       = 0.
@@ -167,7 +162,12 @@ def train_loop(flags,handlers):
     grp  = blob[grp_key]
     pdg  = blob[pdg_key]
     current_idx = 0
-    losses = {'loss0':[],'loss1':[],'loss2':[],'total':[]}
+    losses = {'loss_same_group' : [],
+              'loss_same_pdg'   : [],
+              'loss_diff_group' : [],
+              'loss_cluster'    : [],
+              'loss_conf'       : [],
+              'loss_total'      : [] }
     handlers.trainer.zero_gradients(handlers.sess)
     # Accummulate gradients
     tspent_train = 0.
@@ -188,21 +188,17 @@ def train_loop(flags,handlers):
       make_summary = summary_step and (current_idx == flags.BATCH_SIZE)
       alpha = min(flags.ALPHA_LIMIT, 1 + (float(epoch) / flags.ALPHA_DECAY) * (flags.ALPHA_LIMIT-1.) + 1.)
       res = handlers.trainer.accum_gradient(handlers.sess,data_v,grp_v,pdg_v,alpha,summary=make_summary)
-      losses['loss0'].append(res[1])
-      losses['loss1'].append(res[2])
-      losses['loss2'].append(res[3])
-      losses['total'].append(res[4])
+      losses[ 'loss_same_group' ].append(res[1])
+      losses[ 'loss_same_pdg'   ].append(res[2])
+      losses[ 'loss_diff_group' ].append(res[3])
+      losses[ 'loss_cluster'    ].append(res[4])
+      losses[ 'loss_conf'       ].append(res[5])
+      losses[ 'loss_total'      ].append(res[6])
       tspent_train = tspent_train + (time.time() - tstart)
-      #print(idx[current_idx-1])
-      #print(data_v[-1][-1].shape)
-      #print(len(res))
-      #print(res[-4:-1])
-      #print(res[-1])
-      #print(res[-1].min(),res[-1].max(),np.unique(res[-1],return_counts=True))
       # log summary
       if make_summary:
         tstart = time.time()
-        handlers.train_logger.add_summary(res[5],handlers.iteration)
+        handlers.train_logger.add_summary(res[7],handlers.iteration)
         tspent_summary = time.time() - tstart
     # Apply gradients
     tstart = time.time()
@@ -213,10 +209,13 @@ def train_loop(flags,handlers):
     tsum_summary += tspent_summary
     
     # Compute loss
-    loss0 = np.mean(losses['loss0'])
-    loss1 = np.mean(losses['loss1'])
-    loss2 = np.mean(losses['loss2'])
-    losstotal = np.mean(losses['total'])
+    
+    loss_same_group = np.mean(losses['loss_same_group'])
+    loss_same_pdg   = np.mean(losses['loss_same_pdg'  ])
+    loss_diff_group = np.mean(losses['loss_diff_group'])
+    loss_cluster    = np.mean(losses['loss_cluster'   ])
+    loss_conf       = np.mean(losses['loss_conf'      ])
+    loss_total      = np.mean(losses['loss_total'     ])
     # Save snapshot
     tspent_save = 0.
     if checkpt_step:
@@ -228,23 +227,31 @@ def train_loop(flags,handlers):
     if handlers.csv_logger:
       tspent_iteration = time.time() - tstart_iteration
       tsum += tspent_iteration
-      csv_data  = '%d,%g,' % (handlers.iteration,epoch)
-      csv_data += '%g,%g,%g,%g,%g,' % (tspent_iteration,tspent_train,tspent_io,tspent_save,tspent_summary)
-      csv_data += '%g,%g,%g,%g,%g,' % (tsum,tsum_train,tsum_io,tsum_save,tsum_summary)
-      csv_data += '%g,%g,%g,%g,%g\n'   % (alpha,loss0,loss1,loss2,losstotal)
-      handlers.csv_logger.write(csv_data)
+      handlers.csv_logger.record(('iter','epoch'),(handlers.iteration,epoch))
+      handlers.csv_logger.record(('titer','ttrain','tio','tsave','tsummary'),
+                                 (tspent_iteration,tspent_train,tspent_io,tspent_save,tspent_summary))
+      handlers.csv_logger.record(('tsumiter','tsumtrain','tsumio','tsumsave','tsumsummary'),
+                                 (tsum,tsum_train,tsum_io,tsum_save,tsum_summary))
+      handlers.csv_logger.record(('alpha','loss_same_group','loss_same_pdg','loss_diff_group','loss_cluster'),
+                                 (alpha,loss_same_group,loss_same_pdg,loss_diff_group,loss_cluster))
+      handlers.csv_logger.record(('loss_conf','loss_total'),(loss_conf,loss_total))
+      handlers.csv_logger.write()
     # Report (stdout)
     if report_step:
-      loss0 = round_decimals(loss0,4)
-      loss1 = round_decimals(loss1,4)
-      loss2 = round_decimals(loss2,4)
-      losstotal = round_decimals(losstotal,4)
+      loss_same_group = round_decimals(loss_same_group, 4)
+      loss_same_pdg   = round_decimals(loss_same_pdg,   4)
+      loss_diff_group = round_decimals(loss_diff_group, 4)
+      loss_cluster    = round_decimals(loss_cluster,    4)
+      loss_conf       = round_decimals(loss_conf,       4)
+      loss_total      = round_decimals(loss_total,      4)
       tfrac = round_decimals(tspent_train/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
       mem = round_decimals(handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())/1.e9,3)
-      msg = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g ... loss0 %g loss1 %g loss2 %g loss %g'
-      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha,loss0,loss1,loss2,losstotal)
-      print(msg)
+      msg1 = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g\n'
+      msg1 = msg1 % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha)
+      msg2 = '  Cluster loss %g (%g+%g+%g), Score loss %g, Total Loss %g'
+      msg2 = msg2 % (loss_cluster,loss_same_group,loss_same_pdg,loss_diff_group,loss_conf,loss_total)
+      print(msg1,msg2)
       sys.stdout.flush()
       if handlers.csv_logger: handlers.csv_logger.flush()
       if handlers.train_logger: handlers.train_logger.flush()
@@ -256,10 +263,7 @@ def train_loop(flags,handlers):
   handlers.data_io.finalize()
 
 def inference_loop(flags,handlers):
-  handlers.csv_logger.write('iter,epoch')
-  handlers.csv_logger.write(',titer,tinference,tio')
-  handlers.csv_logger.write(',tsumiter,tsuminference,tsumio')
-  handlers.csv_logger.write(',alpha,loss0,loss1,loss2,loss\n')
+
   data_key = flags.DATA_KEYS[0]
   grp_key,pdg_key=(None,None)
   if len(flags.DATA_KEYS)>1:
@@ -285,7 +289,12 @@ def inference_loop(flags,handlers):
     grp,pdg=(None,None)
     if grp_key is not None: grp = blob[grp_key]
     if pdg_key is not None: pdg = blob[pdg_key]
-    losses = {'loss0':[],'loss1':[],'loss2':[],'total':[]}
+    losses = {'loss_same_group' : [],
+              'loss_same_pdg'   : [],
+              'loss_diff_group' : [],
+              'loss_cluster'    : [],
+              'loss_conf'       : [],
+              'loss_total'      : [] }
     current_idx = 0
     
     # Run inference
@@ -308,18 +317,24 @@ def inference_loop(flags,handlers):
       alpha = flags.ALPHA_LIMIT
       res = handlers.trainer.inference(handlers.sess,data_v,grp_v,pdg_v,alpha)
       pred_vv.append(res[0:len(flags.GPUS)])
-      losses['loss0'].append(res[len(flags.GPUS)])
-      losses['loss1'].append(res[len(flags.GPUS)+1])
-      losses['loss2'].append(res[len(flags.GPUS)+2])
-      losses['total'].append(res[len(flags.GPUS)+3])
+
+      losses[ 'loss_same_group' ].append(res[1])
+      losses[ 'loss_same_pdg'   ].append(res[2])
+      losses[ 'loss_diff_group' ].append(res[3])
+      losses[ 'loss_cluster'    ].append(res[4])
+      losses[ 'loss_conf'       ].append(res[5])
+      losses[ 'loss_total'      ].append(res[6])
+
+
     tspent_inference = tspent_inference + (time.time() - tstart)
     tsum_inference  += tspent_inference
-
     # Compute loss
-    loss0 = np.mean(losses['loss0'])
-    loss1 = np.mean(losses['loss1'])
-    loss2 = np.mean(losses['loss2'])
-    losstotal = np.mean(losses['total'])
+    loss_same_group = np.mean(losses['loss_same_group'])
+    loss_same_pdg   = np.mean(losses['loss_same_pdg'  ])
+    loss_diff_group = np.mean(losses['loss_diff_group'])
+    loss_cluster    = np.mean(losses['loss_cluster'   ])
+    loss_conf       = np.mean(losses['loss_conf'      ])
+    loss_total      = np.mean(losses['loss_total'     ])
 
     # Store output if requested
     if flags.OUTPUT_FILE:
@@ -335,23 +350,32 @@ def inference_loop(flags,handlers):
     if handlers.csv_logger:
       tspent_iteration = time.time() - tstart_iteration
       tsum += tspent_iteration
-      csv_data  = '%d,%g,' % (handlers.iteration,epoch)
-      csv_data += '%g,%g,%g,' % (tspent_iteration,tspent_inference,tspent_io)
-      csv_data += '%g,%g,%g,' % (tsum,tsum_inference,tsum_io)
-      csv_data += '%g,%g,%g,%g,%g\n'   % (alpha,loss0,loss1,loss2,losstotal)
-      handlers.csv_logger.write(csv_data)
+
+      handlers.csv_logger.record(('iter','epoch'),(handlers.iteration,epoch))
+      handlers.csv_logger.record(('titer','tinference','tio'),
+                                 (tspent_iteration,tspent_inference,tspent_io))
+      handlers.csv_logger.record(('tsumiter','tsumtrain','tsumio'),
+                                 (tsum,tsum_train,tsum_io))
+      handlers.csv_logger.record(('alpha','loss_same_group','loss_same_pdg','loss_diff_group','loss_cluster'),
+                                 (alpha,loss_same_group,loss_same_pdg,loss_diff_group,loss_cluster))
+      handlers.csv_logger.record(('loss_conf','loss_total'),(loss_conf,loss_total))
+      handlers.csv_logger.write()
     # Report (stdout)
     if report_step:
-      loss0 = round_decimals(loss0,4)
-      loss1 = round_decimals(loss1,4)
-      loss2 = round_decimals(loss2,4)
-      losstotal = round_decimals(losstotal,4)
+      loss_same_group = round_decimals(loss_same_group, 4)
+      loss_same_pdg   = round_decimals(loss_same_pdg,   4)
+      loss_diff_group = round_decimals(loss_diff_group, 4)
+      loss_cluster    = round_decimals(loss_cluster,    4)
+      loss_conf       = round_decimals(loss_conf,       4)
+      loss_total      = round_decimals(loss_total,      4)
       tfrac = round_decimals(tspent_inference/tspent_iteration*100.,2)
       epoch = round_decimals(epoch,2)
       mem = round_decimals(handlers.sess.run(tf.contrib.memory_stats.MaxBytesInUse())/1.e9,3)
-      msg = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g ... loss0 %g loss1 %g loss2 %g loss %g'
-      msg = msg % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha,loss0,loss1,loss2,losstotal)
-      print(msg)
+      msg1 = 'Iter. %d (epoch %g) @ %s ... ttrain %g%% mem. %g GB... alpha %g\n'
+      msg1 = msg1 % (handlers.iteration,epoch,tstamp_iteration,tfrac,mem,alpha)
+      msg2 = '  Cluster loss %g (%g+%g+%g), Score loss %g, Total Loss %g'
+      msg2 = msg2 % (loss_cluster,loss_same_group,loss_same_pdg,loss_diff_group,loss_conf,loss_total)
+      print(msg1,msg2)
       sys.stdout.flush()
       if handlers.csv_logger: handlers.csv_logger.flush()
     # Increment iteration counter

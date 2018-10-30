@@ -17,16 +17,19 @@ class trainval(object):
       self._optimizer = tf.train.AdamOptimizer(self._flags.LEARNING_RATE)
 
       self._feed_blob = {}
-      self._points_v   = []
-      self._grp_v = []
-      self._pdg_v = []
-      self._alpha = []
-      self._pred_v= []
-      loss0_v     = []
-      loss1_v     = []
-      loss2_v     = []
-      losstotal_v = []
-      grad_v      = []
+      self._points_v  = []
+      self._grp_v  = []
+      self._pdg_v  = []
+      self._alpha  = []
+      self._group_pred_v = []
+      self._conf_pred_v = []
+      loss_same_group_v = []
+      loss_same_pdg_v   = []
+      loss_diff_group_v = []
+      loss_cluster_v    = []
+      loss_conf_v  = []
+      loss_total_v = []
+      gradient_v   = []
       for i, gpu_id in enumerate(self._flags.GPUS):
         with tf.device('/gpu:%d' % i):
           with tf.name_scope('GPU%d' % gpu_id) as scope:
@@ -40,54 +43,70 @@ class trainval(object):
               self._grp_v.append(grp_id)
               self._pdg_v.append(pdg_id)
               self._alpha.append(alpha)
+              
               num_point = tf.shape(self._points_v[-1])[1]
               grp_dist = dgcnn.ops.dist_nn(grp_id)
               pdg_dist = dgcnn.ops.dist_nn(pdg_id)
-              sim_grp0 = tf.cast((grp_dist < 0.5),tf.float32)
-              sim_grp1 = tf.cast(tf.logical_and((pdg_dist < 0.5), (grp_dist > 0.5)),tf.float32)
-              sim_grp2 = tf.cast((pdg_dist > 0.5),tf.float32)
-              pred = dgcnn.model.build(points, self._flags)
-              self._pred_v.append(pred)
-              # If training, compute gradients
-              num_sim_grp0 = (tf.reduce_sum(sim_grp0) - tf.cast(num_point,tf.float32))#/2.
-              num_sim_grp1 = tf.reduce_sum(sim_grp1)# / 2.
-              num_sim_grp2 = tf.reduce_sum(sim_grp2)# / 2.
-              self._num_point = num_point
-              self._num_sim_grp0 = num_sim_grp0
-              self._num_sim_grp1 = num_sim_grp1
-              self._num_sim_grp2 = num_sim_grp2
-              self._elements = tf.maximum((1.0 - (sim_grp1 * pred)),0.0)
-              loss0 = tf.cond(num_sim_grp0 > 0,
-                              lambda: tf.reduce_sum(pred * sim_grp0) / num_sim_grp0,
-                              lambda: tf.constant(0.0))
-              loss1 = tf.cond(num_sim_grp1 > 0,
-                              lambda: tf.reduce_sum(tf.maximum(self._flags.K1 - pred,0.0) * sim_grp1) / num_sim_grp1 * alpha,
-                              lambda: tf.constant(0.0))
-              loss2 = tf.cond(num_sim_grp2 > 0,
-                              lambda: tf.reduce_sum(tf.maximum(self._flags.K2 - pred,0.0) * sim_grp2) / num_sim_grp2,
-                              lambda: tf.constant(0.0))
-              #loss0 = tf.reduce_sum(pred * sim_grp0) / tf.cast(num_point,tf.float32)
-              #loss1 = tf.reduce_sum(1. / ((sim_grp1 * pred) + 100000.)) / tf.cast(num_point,tf.float32)
-              #loss2 = tf.reduce_sum(1. / ((sim_grp2 * pred) + 100000.)) / tf.cast(num_point,tf.float32)
-              loss_total = loss0 + loss1 + loss2
-              loss0_v.append(loss0)
-              loss1_v.append(loss1)
-              loss2_v.append(loss2)
-              losstotal_v.append(loss_total)
+              # sim_grp0 is (B,N,N), 1.0 for point combinations belonging to the same group (diagonal is 1.0)
+              label_same_group = tf.cast((grp_dist < 0.5),tf.float32)
+              # sim_grp1 is (B,N,N), 1.0 for point combinations belonging to the same PDG but different group (but diagonal is 0.0)
+              label_same_pdg   = tf.cast(tf.logical_and((pdg_dist < 0.5), (grp_dist > 0.5)),tf.float32)
+              # sim_grp2 is (B,N,N), 1.0 for point combinations belonging to the different PDG and different group (but diagonal is 0.0)
+              label_diff_group = tf.cast((pdg_dist > 0.5),tf.float32)
+              # construct a model and get the output: similarity matrix (B,N,N) and confidence array (B,N)
+              pred, conf = dgcnn.model.build(points, self._flags)
+              self._group_pred_v.append(pred)
+              #
+              # Compute loss for similarity matrix
+              #
+              num_same_group = (tf.reduce_sum(label_same_group) - tf.cast(num_point,tf.float32))#/2.
+              num_same_pdg   = tf.reduce_sum(label_same_pdg)# / 2.
+              num_diff_group = tf.reduce_sum(label_diff_group)# / 2.
+              loss_same_group = tf.cond(num_same_group > 0,
+                                        lambda: tf.reduce_sum(pred * label_same_group) / num_same_group,
+                                        lambda: tf.constant(0.0))
+              loss_same_pdg   = tf.cond(num_same_pdg > 0,
+                                        lambda: tf.reduce_sum(tf.maximum(self._flags.K1 - pred,0.0) * label_same_pdg) / num_same_pdg * alpha,
+                                        lambda: tf.constant(0.0))
+              loss_diff_group = tf.cond(num_diff_group > 0,
+                                        lambda: tf.reduce_sum(tf.maximum(self._flags.K2 - pred,0.0) * label_diff_group) / num_diff_group,
+                                        lambda: tf.constant(0.0))
+              loss_cluster = loss_same_group + loss_same_pdg + loss_diff_group
+              loss_same_group_v.append(loss_same_group)
+              loss_same_pdg_v.append(loss_same_pdg)
+              loss_diff_group_v.append(loss_diff_group)
+              loss_cluster_v.append(loss_cluster)
+              #
+              # Compute loss for confidence score
+              #
+              conf = tf.nn.sigmoid(conf)
+              label_same_group = (grp_dist < 0.5)
+              pred_same_group  = (pred < self._flags.K1)
+              conf_label_numerator   = tf.reduce_sum(tf.cast(tf.logical_and (pred_same_group,label_same_group),tf.float32),axis=2)
+              conf_label_denominator = tf.reduce_sum(tf.cast(tf.logical_or  (pred_same_group,label_same_group),tf.float32),axis=2) + 1.e-6
+              conf_label = conf_label_numerator / conf_label_denominator
+              loss_conf = tf.reduce_mean(tf.squared_difference(conf, conf_label))
+              self._conf_pred_v.append(conf)
+              loss_conf_v.append(loss_conf)
+
+              # total loss
+              loss_total = loss_conf + loss_cluster
+              loss_total_v.append(loss_total)
               if self._flags.TRAIN:
                 grad = self._optimizer.compute_gradients(loss_total)
-                grad_v.append(grad)
+                gradient_v.append(grad)
 
       # Average loss across GPUs
-      self._loss0 = tf.add_n(loss0_v) / float(len(self._flags.GPUS))
-      self._loss1 = tf.add_n(loss1_v) / float(len(self._flags.GPUS))
-      self._loss2 = tf.add_n(loss2_v) / float(len(self._flags.GPUS))
-      self._losstotal = tf.add_n(losstotal_v) / float(len(self._flags.GPUS))
-                
+      self._loss_same_group = tf.add_n(loss_same_group_v) / float(len(self._flags.GPUS))
+      self._loss_same_pdg   = tf.add_n(loss_same_pdg_v  ) / float(len(self._flags.GPUS))
+      self._loss_diff_group = tf.add_n(loss_diff_group_v) / float(len(self._flags.GPUS))
+      self._loss_cluster    = tf.add_n(loss_cluster_v   ) / float(len(self._flags.GPUS))
+      self._loss_conf       = tf.add_n(loss_conf_v      ) / float(len(self._flags.GPUS))
+      self._loss_total      = tf.add_n(loss_total_v     ) / float(len(self._flags.GPUS))
       # If training, average gradients across GPUs
       if self._flags.TRAIN:
-        average_grad_v = []
-        for grad_and_var_v in zip(*grad_v):
+        average_gradient_v = []
+        for grad_and_var_v in zip(*gradient_v):
           v = []
           for g, _ in grad_and_var_v:
             v.append(tf.expand_dims(g,0))
@@ -96,17 +115,22 @@ class trainval(object):
           
           if self._flags.DEBUG:
             print('Computing gradients for %s from %d GPUs' % (grad_and_var_v[0][1].name,len(grad_and_var_v)))
-          average_grad_v.append((grad, grad_and_var_v[0][1]))
+          average_gradient_v.append((grad, grad_and_var_v[0][1]))
       
         accum_vars   = [tf.Variable(v.initialized_value(),trainable=False) for v in tf.trainable_variables()]
         self._zero_grad    = [v.assign(tf.zeros_like(v)) for v in accum_vars]
         self._accum_grad_v = []
 
-        self._accum_grad_v += [accum_vars[j].assign_add(g[0]) for j,g in enumerate(average_grad_v)]
+        self._accum_grad_v += [accum_vars[j].assign_add(g[0]) for j,g in enumerate(average_gradient_v)]
         self._apply_grad = self._optimizer.apply_gradients(zip(accum_vars, tf.trainable_variables()))
 
         # Merge summary
-        tf.summary.scalar('loss', self._losstotal)
+        tf.summary.scalar('loss_same_group', self._loss_same_group)
+        tf.summary.scalar('loss_same_pdg',   self._loss_same_pdg  )
+        tf.summary.scalar('loss_diff_group', self._loss_diff_group)
+        tf.summary.scalar('loss_cluster',    self._loss_cluster   )
+        tf.summary.scalar('loss_conf',       self._loss_conf      )
+        tf.summary.scalar('loss_total',      self._loss_total     )
         self._merged_summary=tf.summary.merge_all()
       
   def feed_dict(self,data,grp=None,pdg=None,alpha=None):
@@ -126,19 +150,20 @@ class trainval(object):
   
   def inference(self,sess,data,grp=None,pdg=None,alpha=None):
     feed_dict = self.feed_dict(data,grp,pdg,alpha)
-    ops = list(self._pred_v)
+    ops = list(self._group_pred_v)
     if grp is not None and pdg is not None:
-      ops += [self._loss0,self._loss1,self._loss2,self._losstotal]
+      ops += [self._loss_same_group,self._loss_same_pdg,self._loss_diff_group,self._loss_cluster]
+      ops += [self._loss_conf,self._loss_total]
     return sess.run(ops, feed_dict = feed_dict)
     
   def accum_gradient(self, sess, data, grp, pdg, alpha=1.0, summary=False):
     if not self._flags.TRAIN:
       raise NotImplementedError
     feed_dict = self.feed_dict(data,grp,pdg,alpha)
-    ops  = [self._accum_grad_v, self._loss0, self._loss1, self._loss2, self._losstotal]
+    ops  = [self._accum_grad_v, self._loss_same_group, self._loss_same_pdg, self._loss_diff_group, self._loss_cluster]
+    ops += [self._loss_conf, self._loss_total]
     if summary:
       ops += [self._merged_summary]
-    ops += [self._num_point,self._num_sim_grp0,self._num_sim_grp1,self._num_sim_grp2,self._elements]
     return sess.run(ops, feed_dict = feed_dict)
 
   def zero_gradients(self, sess):

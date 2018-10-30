@@ -130,6 +130,7 @@ class io_larcv(io_base):
         data = self._blob[self._flags.DATA_KEYS[0]]
         self._num_channels = data[0].shape[-1]
         self._num_entries = len(data)
+        print(self._num_entries,'entries')
         # Output
         if self._flags.OUTPUT_FILE:
             import tempfile
