@@ -22,7 +22,7 @@ class trainval(object):
       self._pdg_v  = []
       self._alpha  = []
       self._group_pred_v = []
-      self._conf_pred_v = []
+      self._group_conf_v = []
       loss_same_group_v = []
       loss_same_pdg_v   = []
       loss_diff_group_v = []
@@ -86,7 +86,7 @@ class trainval(object):
               conf_label_denominator = tf.reduce_sum(tf.cast(tf.logical_or  (pred_same_group,label_same_group),tf.float32),axis=2) + 1.e-6
               conf_label = conf_label_numerator / conf_label_denominator
               loss_conf = tf.reduce_mean(tf.squared_difference(conf, conf_label))
-              self._conf_pred_v.append(conf)
+              self._group_conf_v.append(conf)
               loss_conf_v.append(loss_conf)
 
               # total loss
@@ -150,7 +150,8 @@ class trainval(object):
   
   def inference(self,sess,data,grp=None,pdg=None,alpha=None):
     feed_dict = self.feed_dict(data,grp,pdg,alpha)
-    ops = list(self._group_pred_v)
+    ops  = list(self._group_pred_v)
+    ops += list(self._group_conf_v)
     if grp is not None and pdg is not None:
       ops += [self._loss_same_group,self._loss_same_pdg,self._loss_diff_group,self._loss_cluster]
       ops += [self._loss_conf,self._loss_total]

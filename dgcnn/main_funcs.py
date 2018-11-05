@@ -6,37 +6,8 @@ import numpy as np
 import dgcnn
 import tensorflow as tf
 
-def DBScan(dist_v,threshold):
-  res = []
-  for dist in dist_v:
-    np.fill_diagonal(dist,threshold+1)
-    cands   = np.where(np.min(dist,axis=0) < threshold)
-    grp     = np.zeros(shape=[dist.shape[0]],dtype=np.float32)
-    grp[:]  = -1
-    latest_grp_id = 0
-    # loop over candidates and group coordinates
-    friends_v = [np.where(dist[c] < threshold) for c in cands[0]]
-    print('Found',len(cands[0]),'candidates...')
-    for i,cand in enumerate(cands[0]):
-      if grp[cand]>=0: continue
-      # Is any of friend in an existing group? Then use the closest one
-      friends = friends_v[i][0]
-      grouped_friends = [friend for friend in friends if grp[friend]>=0]
-      if len(grouped_friends)>0:
-        best_friend = np.argmin(dist[cand][grouped_friends])
-        best_friend = grouped_friends[best_friend]
-        grp[cand] = grp[best_friend]
-        #print('found grouped friends:',grouped_friends)
-        print('setting from best friend',cand,'(dist',dist[cand][best_friend],') grp',grp[cand])
-      else:
-        grp[friends] = latest_grp_id
-        grp[cand] = latest_grp_id
-        print('setting',cand,latest_grp_id)
-        latest_grp_id +=1
-        #print('setting friends',friends,latest_grp_id)
-
-    res.append(grp)
-  return res
+#grouping = dgcnn.InclusiveGrouping
+grouping = dgcnn.ScoreGrouping
 
 def round_decimals(val,digits):
   factor = float(np.power(10,digits))
@@ -299,8 +270,9 @@ def inference_loop(flags,handlers):
     
     # Run inference
     tspent_inference = 0.
-    tstart  = time.time()
-    pred_vv = []
+    tstart   = time.time()
+    pred_vv  = []
+    score_vv = []
     while current_idx < flags.BATCH_SIZE:
       data_v = []
       grp_v,pdg_v=(None,None)
@@ -316,15 +288,15 @@ def inference_loop(flags,handlers):
       # compute gradients
       alpha = flags.ALPHA_LIMIT
       res = handlers.trainer.inference(handlers.sess,data_v,grp_v,pdg_v,alpha)
-      pred_vv.append(res[0:len(flags.GPUS)])
-
-      losses[ 'loss_same_group' ].append(res[1])
-      losses[ 'loss_same_pdg'   ].append(res[2])
-      losses[ 'loss_diff_group' ].append(res[3])
-      losses[ 'loss_cluster'    ].append(res[4])
-      losses[ 'loss_conf'       ].append(res[5])
-      losses[ 'loss_total'      ].append(res[6])
-
+      num_gpus = len(flags.GPUS)
+      pred_vv.append(res[0:num_gpus])
+      score_vv.append(res[num_gpus:num_gpus*2])
+      losses[ 'loss_same_group' ].append(res[num_gpus*2])
+      losses[ 'loss_same_pdg'   ].append(res[num_gpus*2+1])
+      losses[ 'loss_diff_group' ].append(res[num_gpus*2+2])
+      losses[ 'loss_cluster'    ].append(res[num_gpus*2+3])
+      losses[ 'loss_conf'       ].append(res[num_gpus*2+4])
+      losses[ 'loss_total'      ].append(res[num_gpus*2+5])
 
     tspent_inference = tspent_inference + (time.time() - tstart)
     tsum_inference  += tspent_inference
@@ -339,9 +311,12 @@ def inference_loop(flags,handlers):
     # Store output if requested
     if flags.OUTPUT_FILE:
       idx_ctr = 0
-      for pred_v in pred_vv:
-        for pred in pred_v:
-          grp = DBScan(pred,5)
+      for i in range(len(pred_vv)):
+        for j in range(len(pred_vv[i])):
+          pred  = pred_vv[i][j]
+          score = score_vv[i][j]
+          print('score min,max,mean,std',score.min(),score.max(),score.mean(),score.std())
+          grp = grouping(pred,score,5)
           handlers.data_io.store(idx[idx_ctr],grp[0].reshape([-1,1]))
           idx_ctr += 1
 
@@ -354,8 +329,8 @@ def inference_loop(flags,handlers):
       handlers.csv_logger.record(('iter','epoch'),(handlers.iteration,epoch))
       handlers.csv_logger.record(('titer','tinference','tio'),
                                  (tspent_iteration,tspent_inference,tspent_io))
-      handlers.csv_logger.record(('tsumiter','tsumtrain','tsumio'),
-                                 (tsum,tsum_train,tsum_io))
+      handlers.csv_logger.record(('tsumiter','tsuminference','tsumio'),
+                                 (tsum,tsum_inference,tsum_io))
       handlers.csv_logger.record(('alpha','loss_same_group','loss_same_pdg','loss_diff_group','loss_cluster'),
                                  (alpha,loss_same_group,loss_same_pdg,loss_diff_group,loss_cluster))
       handlers.csv_logger.record(('loss_conf','loss_total'),(loss_conf,loss_total))

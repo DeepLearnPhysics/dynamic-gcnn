@@ -115,6 +115,7 @@ def build(point_cloud, flags):
                        trainable   = True,
                        padding     = 'VALID',
                        normalizer_fn = slim.batch_norm,
+                       activation_fn = None,
                        scope       = 'ScoreFinal')
     conf = tf.squeeze(conf,axis=[2,3])
   if debug: print('Shape {:s} ... Name {:s}'.format(conf.shape,conf.name))
