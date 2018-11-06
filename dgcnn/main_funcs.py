@@ -7,6 +7,8 @@ import dgcnn
 import tensorflow as tf
 
 #grouping = dgcnn.InclusiveGrouping
+#grouping = dgcnn.DBSCANGrouping
+#grouping = dgcnn.SGPNGrouping
 grouping = dgcnn.ScoreGrouping
 
 def round_decimals(val,digits):

@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 import os
 import numpy as np
+from sklearn.cluster import DBSCAN
+
 
 class CSVData:
 
@@ -102,6 +104,75 @@ def ScoreGrouping(dist_v,score_v,threshold):
           new_grp_id += 1
     res.append(grp)
   return res
+
+
+def DBSCANGrouping(dist_v, score_v, threshold):
+    """
+    Using Scikit Learn DBSCAN implementation
+    Does not use scores
+    """
+    labels = []
+    # dbscan = DBSCAN(eps=3, min_samples=2, metric='precomputed')
+    for dist in dist_v:
+        db = DBSCAN(eps=threshold, min_samples=1, metric='precomputed').fit(dist)
+        print('Clusters: ', np.unique(db.labels_))
+        labels.append(db.labels_.astype(np.float32))
+    return labels
+
+
+def SGPNGrouping(dist_v, scores_v, threshold, debug=False):
+    """
+    Grouping method from the paper SGPN.
+    Discards groups with a low cardinal or low score, then NMS-style pruning.
+    /!\ Other thresholds hardcoded here!
+    """
+    assert len(dist_v) == len(scores_v)
+    threshold_dist = threshold
+    threshold_score = 0.2
+    threshold_cardinal = 20
+    threshold_iou = 0.05
+    results = []
+    for dist, scores in zip(dist_v, scores_v):
+        if debug: print(scores.mean(), scores.std())
+        # First create proposals based on similitude distance
+        proposals = dist < threshold_dist
+
+        # Discard proposals with small confidence score
+        keep_index = scores > threshold_score
+        proposals = proposals[keep_index, :]
+        scores = scores[keep_index]
+        if debug: print('score', proposals.shape, scores.shape)
+
+        # Discard proposals with small cardinal
+        keep_index2 = np.sum(proposals, axis=1) > threshold_cardinal
+        proposals = proposals[keep_index2, :]
+        scores = scores[keep_index2]
+        if debug: print('cardinal', proposals.shape, scores.shape)
+        # IoU NMS
+        # Order by score
+        index = np.argsort(scores)
+        scores = scores[index]
+        proposals = proposals[index, :]
+
+        final_groups = []
+        while proposals.shape[0] > 1:
+            intersection = np.sum(np.logical_and(proposals[0], proposals), axis=-1)
+            union = np.sum(np.logical_or(proposals[0], proposals), axis=-1) + 1e-6
+            iou = intersection / union
+            # print('iou', np.mean(iou))
+            groups_to_merge = iou > threshold_iou
+            new_group = np.logical_or.reduce(proposals[groups_to_merge])
+            final_groups.append(new_group)
+            proposals = proposals[iou <= threshold_iou]
+
+        final_groups = np.array(final_groups)
+        if final_groups.shape[0]:
+            final_groups = np.argmax(final_groups, axis=0)
+        else:  # No group left
+            final_groups = np.zeros((dist.shape[1],))
+        results.append(final_groups.astype(np.float32))
+    return results
+
 
 if __name__ == '__main__':
     d=CSVData('aho.csv')
