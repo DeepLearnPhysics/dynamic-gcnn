@@ -7,9 +7,9 @@ import dgcnn
 import tensorflow as tf
 
 #grouping = dgcnn.InclusiveGrouping
-#grouping = dgcnn.DBSCANGrouping
+grouping = dgcnn.DBSCANGrouping
 #grouping = dgcnn.SGPNGrouping
-grouping = dgcnn.ScoreGrouping
+#grouping = dgcnn.ScoreGrouping
 
 def round_decimals(val,digits):
   factor = float(np.power(10,digits))
@@ -318,7 +318,7 @@ def inference_loop(flags,handlers):
           pred  = pred_vv[i][j]
           score = score_vv[i][j]
           print('score min,max,mean,std',score.min(),score.max(),score.mean(),score.std())
-          grp = grouping(pred,score,5)
+          grp = grouping(pred,score,0.8)
           handlers.data_io.store(idx[idx_ctr],grp[0].reshape([-1,1]))
           idx_ctr += 1
 

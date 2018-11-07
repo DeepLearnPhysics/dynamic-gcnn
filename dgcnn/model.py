@@ -49,7 +49,8 @@ def build(point_cloud, flags):
                       stride      = 1,
                       trainable   = True,
                       padding     = 'VALID',
-                      normalizer_fn = slim.batch_norm,
+                      #normalizer_fn = slim.batch_norm,
+                      normalizer_fn = None,
                       scope       = 'Final')
     if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
     
@@ -68,7 +69,8 @@ def build(point_cloud, flags):
                     stride      = 1,
                     trainable   = True,
                     padding     = 'VALID',
-                    normalizer_fn = slim.batch_norm,
+                    #normalizer_fn = slim.batch_norm,
+                    normalizer_fn = None,
                     scope       = 'MergedEdgeConv')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   tensors.append(net)
@@ -87,9 +89,9 @@ def build(point_cloud, flags):
 
   net = dgcnn.ops.fc(net=net, repeat=num_fc, num_filters=num_fc_filters, trainable=is_training, debug=debug)
 
-  if is_training:
-    net = tf.nn.dropout(net, 0.7, None)
-    if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
+  #if is_training:
+  #  net = tf.nn.dropout(net, 0.7, None)
+  #  if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net = tf.squeeze(net,axis=-2)
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 
@@ -114,7 +116,8 @@ def build(point_cloud, flags):
                        stride      = 1,
                        trainable   = True,
                        padding     = 'VALID',
-                       normalizer_fn = slim.batch_norm,
+                       #normalizer_fn = slim.batch_norm,
+                       normalizer_fn = None,
                        activation_fn = None,
                        scope       = 'ScoreFinal')
     conf = tf.squeeze(conf,axis=[2,3])

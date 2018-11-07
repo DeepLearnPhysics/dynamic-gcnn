@@ -57,7 +57,8 @@ def edge_conv(point_cloud, k, num_filters, trainable, activation=tf.nn.relu, deb
                     stride      = 1,
                     trainable   = trainable,
                     padding     = 'VALID',
-                    normalizer_fn = slim.batch_norm,
+                    #normalizer_fn = slim.batch_norm,
+                    normalizer_fn = None,
                     scope       = 'conv0')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   net_max  = tf.reduce_max  (net, axis=-2, keepdims=True)
@@ -72,9 +73,20 @@ def edge_conv(point_cloud, k, num_filters, trainable, activation=tf.nn.relu, deb
                     stride      = 1,
                     trainable   = trainable,
                     padding     = 'VALID',
-                    normalizer_fn = slim.batch_norm,
+                    #normalizer_fn = slim.batch_norm,
+                    normalizer_fn = None,
                     activation_fn = activation,
                     scope       = 'conv1')
+  net = slim.conv2d(inputs      = net,
+                    num_outputs = num_filters,
+                    kernel_size = 1,
+                    stride      = 1,
+                    trainable   = trainable,
+                    padding     = 'VALID',
+                    #normalizer_fn = slim.batch_norm,
+                    normalizer_fn = None,
+                    activation_fn = activation,
+                    scope       = 'conv2')
   if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
   
   return [net_max, net_mean, net]
@@ -135,7 +147,8 @@ def repeat_residual_edge_conv(point_cloud, repeat, k, num_filters, trainable, de
                                  stride      = 1,
                                  trainable   = trainable,
                                  padding     = 'VALID',
-                                 normalizer_fn = slim.batch_norm,
+                                 #normalizer_fn = slim.batch_norm,
+                                 normalizer_fn = None,
                                  activation_fn = None,
                                  scope       = 'shortcut')
         tensors[-1] = tf.nn.relu(shortcut + tensors[-1])
@@ -163,7 +176,8 @@ def fc(net, repeat, num_filters, trainable, debug=False):
                       stride      = 1,
                       trainable   = trainable,
                       padding     = 'VALID',
-                      normalizer_fn = slim.batch_norm,
+                      #normalizer_fn = slim.batch_norm,
+                      normalizer_fn = None,
                       scope       = scope)
     if debug: print('Shape {:s} ... Name {:s}'.format(net.shape,net.name))
 

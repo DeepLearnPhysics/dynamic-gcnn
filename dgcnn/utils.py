@@ -114,7 +114,7 @@ def DBSCANGrouping(dist_v, score_v, threshold):
     labels = []
     # dbscan = DBSCAN(eps=3, min_samples=2, metric='precomputed')
     for dist in dist_v:
-        db = DBSCAN(eps=threshold, min_samples=1, metric='precomputed').fit(dist)
+        db = DBSCAN(eps=threshold, min_samples=3, metric='precomputed').fit(dist)
         print('Clusters: ', np.unique(db.labels_))
         labels.append(db.labels_.astype(np.float32))
     return labels
